@@ -10,6 +10,7 @@ Router.register('admin', async function(container) {
         <div class="page-header"><h1>Admin Panel</h1></div>
         <div class="admin-card">
           <h2>Admin Login</h2>
+          <p style="font-size:.85rem;color:var(--muted);margin-bottom:.75rem;">This password is separate from your player account. Only you know it.</p>
           <form id="admin-auth-form">
             <div class="field">
               <label>Admin Password</label>
@@ -18,7 +19,21 @@ Router.register('admin', async function(container) {
             <button type="submit" class="btn-primary">Unlock</button>
             <p id="admin-auth-err" class="error-msg hidden"></p>
           </form>
-          <p class="admin-hint">If no password is set yet, use the <strong>setAdminPassword</strong> endpoint to create one.</p>
+        </div>
+
+        <div class="admin-card" style="margin-top:1rem;">
+          <h2>First Time Setup</h2>
+          <p style="font-size:.85rem;color:var(--muted);margin-bottom:.75rem;">
+            No password set yet? Create one here. This only works if the admin password field in your Google Sheet's Config tab is empty.
+          </p>
+          <form id="first-time-form">
+            <div class="field">
+              <label>Choose Admin Password</label>
+              <input type="password" id="first-time-pw" required minlength="6" placeholder="min 6 characters">
+            </div>
+            <button type="submit" class="btn-secondary">Set Admin Password</button>
+            <p id="first-time-err" class="error-msg hidden"></p>
+          </form>
         </div>
       </div>`;
 
@@ -41,6 +56,27 @@ Router.register('admin', async function(container) {
       adminPw = pw;
       sessionStorage.setItem('wcp_admin_pw', pw);
       renderAdminPanel(res.users || []);
+    });
+
+    document.getElementById('first-time-form').addEventListener('submit', async e => {
+      e.preventDefault();
+      const newPw = document.getElementById('first-time-pw').value;
+      const errEl = document.getElementById('first-time-err');
+      const btn = e.target.querySelector('button');
+      btn.disabled = true;
+      btn.textContent = 'Setting…';
+      const res = await API.post({ action: 'setAdminPassword', new_password: newPw, old_password: '' });
+      if (res.error) {
+        errEl.textContent = 'Failed — a password may already be set. Use the login form above.';
+        errEl.classList.remove('hidden');
+        btn.disabled = false;
+        btn.textContent = 'Set Admin Password';
+        return;
+      }
+      adminPw = newPw;
+      sessionStorage.setItem('wcp_admin_pw', newPw);
+      const usersRes = await API.post({ action: 'adminGetUsers', admin_password: newPw });
+      renderAdminPanel(usersRes.users || []);
     });
   }
 
