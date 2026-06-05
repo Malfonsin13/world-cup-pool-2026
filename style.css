@@ -435,34 +435,187 @@ body {
 .pick-wrong .result-pick   { color: var(--red); }
 .pick-tbd { color: var(--muted); font-style: italic; font-size: 0.85rem; }
 
-/* Bracket preview section */
-.bracket-preview-section {
-  margin-top: 1rem;
-  border: 1.5px dashed var(--border);
-  border-radius: var(--radius);
-  padding: 0.75rem 1rem;
+/* ── Bracket Tree (March Madness style) ─────────────────────────────────── */
+:root {
+  --b-gap: 20px;      /* horizontal gap between round columns */
+  --b-card-h: 70px;   /* height of each matchup card */
+  --b-line: #94a3b8;  /* connector line colour */
 }
-.bracket-preview-section summary {
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 0.95rem;
-  user-select: none;
-  list-style: none;
-}
-.bracket-preview-section summary::-webkit-details-marker { display: none; }
-.bracket-preview-note {
-  font-size: 0.82rem;
-  color: var(--muted);
-  margin: 0.5rem 0 0.75rem;
-}
-.bracket-card-demo { opacity: 0.75; }
-.pick-input-demo {
+
+.btree-scroll-wrap { overflow-x: auto; padding-bottom: 1rem; }
+.btree-demo-note   { font-size: 0.8rem; color: var(--muted); margin-top: 0.5rem; }
+
+.btree {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
+  gap: 0;
+  min-width: max-content;
 }
-.pick-input-demo .team-btn { cursor: default; }
+
+.btree-half {
+  display: flex;
+  align-items: stretch;
+}
+
+/* ── Column ── */
+.b-col {
+  display: flex;
+  flex-direction: column;
+  width: 160px;
+  flex-shrink: 0;
+}
+
+.b-col-final { width: 170px; }
+
+.b-col-label {
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--muted);
+  padding: 0.3rem 0;
+  margin-bottom: 0.25rem;
+  border-bottom: 2px solid var(--border);
+}
+
+.b-col-pts {
+  font-weight: 400;
+  font-size: 0.68rem;
+  color: var(--green);
+}
+
+.b-col-pairs {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+/* ── Pair (groups 2 matchups feeding one next-round slot) ── */
+.b-pair {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  position: relative;
+}
+
+/* Vertical connector between the 2 matchups in a pair */
+.btree-left .b-pair::after,
+.b-col-final .b-pair::after {
+  content: '';
+  position: absolute;
+  right: calc(-1 * var(--b-gap));
+  top: 25%;
+  height: 50%;
+  width: 2px;
+  background: var(--b-line);
+  pointer-events: none;
+}
+
+.btree-right .b-pair::after {
+  content: '';
+  position: absolute;
+  left: calc(-1 * var(--b-gap));
+  top: 25%;
+  height: 50%;
+  width: 2px;
+  background: var(--b-line);
+  pointer-events: none;
+}
+
+/* Pairs with only 1 matchup (SF, Final) — no vertical connector needed */
+.b-pair:only-child.b-pair-single::after { display: none; }
+
+/* ── Matchup card wrapper ── */
+.b-card {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  justify-content: center;
+  padding: 4px 0;
+  position: relative;
+}
+
+/* Horizontal arm: left-side bracket advances rightward */
+.btree-left .b-card::after {
+  content: '';
+  position: absolute;
+  right: calc(-1 * var(--b-gap));
+  top: 50%;
+  width: var(--b-gap);
+  height: 2px;
+  background: var(--b-line);
+  pointer-events: none;
+}
+
+/* Horizontal arm: right-side bracket advances leftward */
+.btree-right .b-card::after {
+  content: '';
+  position: absolute;
+  left: calc(-1 * var(--b-gap));
+  top: 50%;
+  width: var(--b-gap);
+  height: 2px;
+  background: var(--b-line);
+  pointer-events: none;
+}
+
+/* Final column gets arms on both sides */
+.b-col-final .b-card::before,
+.b-col-final .b-card::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: var(--b-gap);
+  height: 2px;
+  background: var(--b-line);
+  pointer-events: none;
+}
+.b-col-final .b-card::before { right: 100%; }
+.b-col-final .b-card::after  { left: 100%; }
+
+/* ── Team Slot Button ── */
+.bs {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  height: calc(var(--b-card-h) / 2);
+  padding: 0 0.5rem;
+  border: 1px solid var(--border);
+  background: var(--card);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+  width: 100%;
+  text-align: left;
+  transition: background .12s, border-color .12s;
+  overflow: hidden;
+}
+
+.bs:first-child { border-radius: 6px 6px 0 0; border-bottom: none; }
+.bs:last-child  { border-radius: 0 0 6px 6px; }
+.bs:only-child  { border-radius: 6px; border-bottom: 1px solid var(--border); }
+
+.bs:not([disabled]):hover { background: #f0fdf4; border-color: var(--green); z-index: 1; }
+.bs.bs-pick   { background: #dcfce7; border-color: var(--green); }
+.bs.bs-win    { background: #fef9c3; border-color: var(--gold); font-weight: 700; }
+.bs.bs-lock   { cursor: default; }
+.bs[disabled] { cursor: default; opacity: .7; }
+.bs-tbd       { color: var(--muted); font-style: italic; font-weight: 400; }
+
+.bs-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bs-pts  {
+  font-size: 0.65rem;
+  background: var(--gold);
+  color: #1e1e1e;
+  border-radius: 4px;
+  padding: 1px 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.bs .flag-img { flex-shrink: 0; }
 
 /* ── Admin ─────────────────────────────────────────────────────────────────── */
 .admin-card {
