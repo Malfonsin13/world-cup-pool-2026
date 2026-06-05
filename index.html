@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>World Cup Pool 2026</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Navigation -->
+  <nav id="nav" style="display:none;">
+    <div class="nav-inner">
+      <a class="nav-brand" href="#/picks">⚽ WCP26</a>
+      <div class="nav-links">
+        <a class="nav-link" data-route="picks" href="#/picks">Picks</a>
+        <a class="nav-link" data-route="bracket" href="#/bracket">Bracket</a>
+        <a class="nav-link" data-route="macro" href="#/macro">Macro</a>
+        <a class="nav-link" data-route="leaderboard" href="#/leaderboard">Leaderboard</a>
+        <a class="nav-link" data-route="admin" href="#/admin">Admin</a>
+      </div>
+      <button id="logout-btn" class="btn-ghost nav-logout">Sign Out</button>
+    </div>
+  </nav>
+
+  <!-- Main content -->
+  <main id="main"></main>
+
+  <!-- Scripts — order matters -->
+  <script src="js/config.js"></script>
+  <script src="js/data/fixtures.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/router.js"></script>
+  <script src="js/views/picks.js"></script>
+  <script src="js/views/bracket.js"></script>
+  <script src="js/views/macro.js"></script>
+  <script src="js/views/leaderboard.js"></script>
+  <script src="js/views/admin.js"></script>
+  <script>
+    Auth.init();
+    document.getElementById('logout-btn').addEventListener('click', () => Auth.logout());
+    Router.init();
+  </script>
+</body>
+</html>
