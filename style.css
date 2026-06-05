@@ -240,16 +240,33 @@ body {
 .fixtures-table tbody tr:hover { background: #f8fafc; }
 .fixtures-table td { padding: 0.55rem 0.4rem; vertical-align: middle; }
 
-.fixture-date  { color: var(--muted); font-size: 0.8rem; white-space: nowrap; width: 130px; }
-.team-home     { text-align: right; font-weight: 600; width: 130px; }
-.team-away     { text-align: left;  font-weight: 600; width: 130px; }
+.fixture-date { color: var(--muted); font-size: 0.78rem; white-space: nowrap; width: 1%; padding-right: 0.75rem; }
+.match-cell   { width: 100%; }
+
+.match-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.t-home {
+  flex: 1;
+  text-align: right;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.t-away {
+  flex: 1;
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.team-flag { margin: 0 0.2rem; font-style: normal; }
 
 .score-input {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 4px;
-  width: 110px;
+  flex-shrink: 0;
 }
 .score-input input[type=number] {
   width: 42px;
@@ -466,7 +483,7 @@ body {
   .nav-links { gap: 0; }
   .nav-link  { padding: 0.35rem 0.5rem; font-size: 0.82rem; }
   .fixtures-table .fixture-date { display: none; }
-  .team-home, .team-away { width: 90px; font-size: 0.82rem; }
+  .t-home, .t-away { font-size: 0.82rem; }
   .prize-boxes { flex-direction: column; }
   .macro-row label { min-width: unset; width: 100%; }
 }

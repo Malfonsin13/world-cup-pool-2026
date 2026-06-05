@@ -59,17 +59,17 @@ Router.register('bracket', async function(container) {
         pickUI = `
           <div class="pick-result ${correct ? 'pick-correct' : myPick ? 'pick-wrong' : 'pick-none'}">
             <span class="result-score">${scoreStr}</span>
-            <span class="result-winner">Winner: ${winner || 'TBD (ET/PKs)'}</span>
-            ${myPick ? `<span class="result-pick">Your pick: ${myPick.team} ${correct ? '✓' : '✗'} ${myPick.pts || 0} pts</span>` : '<span class="result-pick">No pick submitted</span>'}
+            <span class="result-winner">Winner: ${winner ? teamWithFlag(winner) : 'TBD (ET/PKs)'}</span>
+            ${myPick ? `<span class="result-pick">Your pick: ${teamWithFlag(myPick.team)} ${correct ? '✓' : '✗'} ${myPick.pts || 0} pts</span>` : '<span class="result-pick">No pick submitted</span>'}
           </div>`;
       } else if (f.home && f.away) {
         const picked = myPick ? myPick.team : '';
         pickUI = `
           <div class="pick-input" data-round="${roundName}" data-idx="${f.match_index || (i + 1)}">
-            <button class="team-btn ${picked === f.home ? 'selected' : ''}" data-team="${f.home}">${f.home}</button>
+            <button class="team-btn ${picked === f.home ? 'selected' : ''}" data-team="${f.home}">${teamWithFlag(f.home)}</button>
             <span class="vs-sep">vs</span>
-            <button class="team-btn ${picked === f.away ? 'selected' : ''}" data-team="${f.away}">${f.away}</button>
-            ${picked ? `<span class="saved-pick">✓ Picked: ${picked}</span>` : ''}
+            <button class="team-btn ${picked === f.away ? 'selected' : ''}" data-team="${f.away}">${teamWithFlag(f.away)}</button>
+            ${picked ? `<span class="saved-pick">✓ Picked: ${teamWithFlag(picked)}</span>` : ''}
           </div>`;
       } else {
         pickUI = `<div class="pick-tbd">Teams TBD</div>`;
@@ -78,9 +78,9 @@ Router.register('bracket', async function(container) {
       gameCards += `
         <div class="bracket-card">
           <div class="bracket-teams">
-            <span class="b-home">${f.home || '?'}</span>
+            <span class="b-home">${f.home ? teamWithFlag(f.home) : '?'}</span>
             <span class="b-vs">vs</span>
-            <span class="b-away">${f.away || '?'}</span>
+            <span class="b-away">${f.away ? teamWithFlag(f.away) : '?'}</span>
           </div>
           ${pickUI}
         </div>`;

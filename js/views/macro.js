@@ -11,7 +11,7 @@ Router.register('macro', async function(container) {
   const teams = window.ALL_TEAMS;
 
   function teamOption(name, selected) {
-    return `<option value="${name}" ${selected === name ? 'selected' : ''}>${name}</option>`;
+    return `<option value="${name}" ${selected === name ? 'selected' : ''}>${teamFlag(name)} ${name}</option>`;
   }
 
   const allOptions = `<option value="">-- Pick a team --</option>` + teams.map(t => teamOption(t, '')).join('');
@@ -37,7 +37,7 @@ Router.register('macro', async function(container) {
       <div class="macro-row">
         <label for="${id}">${label}</label>
         ${locked
-          ? `<span class="macro-locked-val">${value || '—'}</span>`
+          ? `<span class="macro-locked-val">${value ? teamWithFlag(value) : '—'}</span>`
           : `<select id="${id}">${opts}</select>`
         }
         ${scoreDisplay(pts, label)}

@@ -43,19 +43,23 @@ Router.register('picks', async function(container) {
       rows += `
         <tr data-id="${f.id}">
           <td class="fixture-date">${kickoff}</td>
-          <td class="team-home">${f.home}</td>
-          <td class="score-input">
-            ${locked
-              ? `<span class="score-static">${homeVal !== '' ? homeVal : '—'}</span>`
-              : `<input type="number" class="score-home" min="0" max="20" value="${homeVal}" placeholder="-">`
-            }
-            <span class="score-sep">:</span>
-            ${locked
-              ? `<span class="score-static">${awayVal !== '' ? awayVal : '—'}</span>`
-              : `<input type="number" class="score-away" min="0" max="20" value="${awayVal}" placeholder="-">`
-            }
+          <td class="match-cell">
+            <div class="match-row">
+              <span class="t-home">${teamWithFlag(f.home, 'left')}</span>
+              <div class="score-input">
+                ${locked
+                  ? `<span class="score-static">${homeVal !== '' ? homeVal : '—'}</span>`
+                  : `<input type="number" class="score-home" min="0" max="20" value="${homeVal}" placeholder="-">`
+                }
+                <span class="score-sep">:</span>
+                ${locked
+                  ? `<span class="score-static">${awayVal !== '' ? awayVal : '—'}</span>`
+                  : `<input type="number" class="score-away" min="0" max="20" value="${awayVal}" placeholder="-">`
+                }
+              </div>
+              <span class="t-away">${teamWithFlag(f.away, 'right')}</span>
+            </div>
           </td>
-          <td class="team-away">${f.away}</td>
           <td class="pts-cell ${ptsClass}">${ptsLabel}</td>
         </tr>`;
     });

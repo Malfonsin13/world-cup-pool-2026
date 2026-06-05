@@ -98,6 +98,28 @@ window.FIXTURES = [
   { id: 72, group: 'L', round: 3, home: 'Croatia', away: 'Ghana',   utc: '2026-06-27T21:00:00Z' },
 ];
 
+window.TEAM_FLAGS = {
+  'Algeria': '🇩🇿', 'Argentina': '🇦🇷', 'Australia': '🇦🇺', 'Austria': '🇦🇹',
+  'Belgium': '🇧🇪', 'Bosnia-Herzegovina': '🇧🇦', 'Brazil': '🇧🇷', 'Canada': '🇨🇦',
+  'Cape Verde': '🇨🇻', 'Colombia': '🇨🇴', 'Croatia': '🇭🇷', 'Curacao': '🇨🇼',
+  'Czechia': '🇨🇿', 'DR Congo': '🇨🇩', 'Ecuador': '🇪🇨', 'Egypt': '🇪🇬',
+  'England': '🏴󠁧󠁢󠁥󠁮󠁧󠁿', 'France': '🇫🇷', 'Germany': '🇩🇪', 'Ghana': '🇬🇭',
+  'Haiti': '🇭🇹', 'Iran': '🇮🇷', 'Iraq': '🇮🇶', 'Ivory Coast': '🇨🇮',
+  'Japan': '🇯🇵', 'Jordan': '🇯🇴', 'Mexico': '🇲🇽', 'Morocco': '🇲🇦',
+  'Netherlands': '🇳🇱', 'New Zealand': '🇳🇿', 'Norway': '🇳🇴', 'Panama': '🇵🇦',
+  'Paraguay': '🇵🇾', 'Portugal': '🇵🇹', 'Qatar': '🇶🇦', 'Saudi Arabia': '🇸🇦',
+  'Scotland': '🏴󠁧󠁢󠁳󠁣󠁴󠁿', 'Senegal': '🇸🇳', 'South Africa': '🇿🇦', 'South Korea': '🇰🇷',
+  'Spain': '🇪🇸', 'Sweden': '🇸🇪', 'Switzerland': '🇨🇭', 'Tunisia': '🇹🇳',
+  'Türkiye': '🇹🇷', 'Uruguay': '🇺🇾', 'USA': '🇺🇸', 'Uzbekistan': '🇺🇿'
+};
+
+// Helper used across all views
+window.teamFlag = name => TEAM_FLAGS[name] || '🏳️';
+window.teamWithFlag = (name, flagSide = 'left') =>
+  flagSide === 'left'
+    ? `<span class="team-flag">${teamFlag(name)}</span>${name}`
+    : `${name}<span class="team-flag">${teamFlag(name)}</span>`;
+
 window.ALL_TEAMS = [
   'Algeria','Argentina','Australia','Austria','Belgium','Bosnia-Herzegovina',
   'Brazil','Canada','Cape Verde','Colombia','Croatia','Curacao','Czechia',
