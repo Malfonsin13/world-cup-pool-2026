@@ -2,7 +2,7 @@
 // Replace APPS_SCRIPT_URL after deploying your Apps Script Web App.
 
 window.CONFIG = {
-  APPS_SCRIPT_URL: 'YOUR_APPS_SCRIPT_URL_HERE',
+  APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbxve1C3mK2NkAMqPADz0s8jicKZO0f3EpAGsgg1RShBDg1zDEYcp2Q_TBWBsBE3RlXZhA/exec',
 
   SCORING: {
     group: { exact: 5, result: 2, wrong: 0 },
