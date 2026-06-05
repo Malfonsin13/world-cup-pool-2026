@@ -260,7 +260,16 @@ body {
   font-weight: 600;
   white-space: nowrap;
 }
-.team-flag { margin: 0 0.2rem; font-style: normal; }
+.flag-img {
+  height: 16px;
+  width: auto;
+  vertical-align: middle;
+  border-radius: 2px;
+  margin: 0 0.3rem;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.team-name-text { vertical-align: middle; }
 
 .score-input {
   display: flex;
@@ -425,6 +434,35 @@ body {
 .pick-correct .result-pick { color: var(--green); font-weight: 600; }
 .pick-wrong .result-pick   { color: var(--red); }
 .pick-tbd { color: var(--muted); font-style: italic; font-size: 0.85rem; }
+
+/* Bracket preview section */
+.bracket-preview-section {
+  margin-top: 1rem;
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+}
+.bracket-preview-section summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.95rem;
+  user-select: none;
+  list-style: none;
+}
+.bracket-preview-section summary::-webkit-details-marker { display: none; }
+.bracket-preview-note {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin: 0.5rem 0 0.75rem;
+}
+.bracket-card-demo { opacity: 0.75; }
+.pick-input-demo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.pick-input-demo .team-btn { cursor: default; }
 
 /* ── Admin ─────────────────────────────────────────────────────────────────── */
 .admin-card {

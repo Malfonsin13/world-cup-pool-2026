@@ -98,27 +98,32 @@ window.FIXTURES = [
   { id: 72, group: 'L', round: 3, home: 'Croatia', away: 'Ghana',   utc: '2026-06-27T21:00:00Z' },
 ];
 
+// ISO 3166-1 alpha-2 codes for flagcdn.com images
 window.TEAM_FLAGS = {
-  'Algeria': '🇩🇿', 'Argentina': '🇦🇷', 'Australia': '🇦🇺', 'Austria': '🇦🇹',
-  'Belgium': '🇧🇪', 'Bosnia-Herzegovina': '🇧🇦', 'Brazil': '🇧🇷', 'Canada': '🇨🇦',
-  'Cape Verde': '🇨🇻', 'Colombia': '🇨🇴', 'Croatia': '🇭🇷', 'Curacao': '🇨🇼',
-  'Czechia': '🇨🇿', 'DR Congo': '🇨🇩', 'Ecuador': '🇪🇨', 'Egypt': '🇪🇬',
-  'England': '🏴󠁧󠁢󠁥󠁮󠁧󠁿', 'France': '🇫🇷', 'Germany': '🇩🇪', 'Ghana': '🇬🇭',
-  'Haiti': '🇭🇹', 'Iran': '🇮🇷', 'Iraq': '🇮🇶', 'Ivory Coast': '🇨🇮',
-  'Japan': '🇯🇵', 'Jordan': '🇯🇴', 'Mexico': '🇲🇽', 'Morocco': '🇲🇦',
-  'Netherlands': '🇳🇱', 'New Zealand': '🇳🇿', 'Norway': '🇳🇴', 'Panama': '🇵🇦',
-  'Paraguay': '🇵🇾', 'Portugal': '🇵🇹', 'Qatar': '🇶🇦', 'Saudi Arabia': '🇸🇦',
-  'Scotland': '🏴󠁧󠁢󠁳󠁣󠁴󠁿', 'Senegal': '🇸🇳', 'South Africa': '🇿🇦', 'South Korea': '🇰🇷',
-  'Spain': '🇪🇸', 'Sweden': '🇸🇪', 'Switzerland': '🇨🇭', 'Tunisia': '🇹🇳',
-  'Türkiye': '🇹🇷', 'Uruguay': '🇺🇾', 'USA': '🇺🇸', 'Uzbekistan': '🇺🇿'
+  'Algeria': 'dz', 'Argentina': 'ar', 'Australia': 'au', 'Austria': 'at',
+  'Belgium': 'be', 'Bosnia-Herzegovina': 'ba', 'Brazil': 'br', 'Canada': 'ca',
+  'Cape Verde': 'cv', 'Colombia': 'co', 'Croatia': 'hr', 'Curacao': 'cw',
+  'Czechia': 'cz', 'DR Congo': 'cd', 'Ecuador': 'ec', 'Egypt': 'eg',
+  'England': 'gb-eng', 'France': 'fr', 'Germany': 'de', 'Ghana': 'gh',
+  'Haiti': 'ht', 'Iran': 'ir', 'Iraq': 'iq', 'Ivory Coast': 'ci',
+  'Japan': 'jp', 'Jordan': 'jo', 'Mexico': 'mx', 'Morocco': 'ma',
+  'Netherlands': 'nl', 'New Zealand': 'nz', 'Norway': 'no', 'Panama': 'pa',
+  'Paraguay': 'py', 'Portugal': 'pt', 'Qatar': 'qa', 'Saudi Arabia': 'sa',
+  'Scotland': 'gb-sct', 'Senegal': 'sn', 'South Africa': 'za', 'South Korea': 'kr',
+  'Spain': 'es', 'Sweden': 'se', 'Switzerland': 'ch', 'Tunisia': 'tn',
+  'Türkiye': 'tr', 'Uruguay': 'uy', 'USA': 'us', 'Uzbekistan': 'uz'
 };
 
 // Helper used across all views
-window.teamFlag = name => TEAM_FLAGS[name] || '🏳️';
+window.teamFlag = name => {
+  const code = TEAM_FLAGS[name];
+  if (!code) return '';
+  return `<img src="https://flagcdn.com/w20/${code}.png" alt="${name}" class="flag-img">`;
+};
 window.teamWithFlag = (name, flagSide = 'left') =>
   flagSide === 'left'
-    ? `<span class="team-flag">${teamFlag(name)}</span>${name}`
-    : `${name}<span class="team-flag">${teamFlag(name)}</span>`;
+    ? `${teamFlag(name)}<span class="team-name-text">${name}</span>`
+    : `<span class="team-name-text">${name}</span>${teamFlag(name)}`;
 
 window.ALL_TEAMS = [
   'Algeria','Argentina','Australia','Austria','Belgium','Bosnia-Herzegovina',

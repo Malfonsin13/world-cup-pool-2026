@@ -93,8 +93,34 @@ Router.register('bracket', async function(container) {
       </div>`;
   }
 
+  // Demo matchups shown when bracket isn't open yet
+  const demoMatchups = [
+    ['Argentina', 'France'], ['Brazil', 'England'], ['Germany', 'Spain'], ['Portugal', 'Netherlands'],
+    ['Mexico', 'USA'], ['Belgium', 'Morocco'], ['Japan', 'Senegal'], ['Colombia', 'Norway']
+  ];
+  const demoCards = demoMatchups.map(([h, a]) => `
+    <div class="bracket-card bracket-card-demo">
+      <div class="bracket-teams">
+        <span class="b-home">${teamWithFlag(h)}</span>
+        <span class="b-vs">vs</span>
+        <span class="b-away">${teamWithFlag(a)}</span>
+      </div>
+      <div class="pick-input-demo">
+        <button class="team-btn" disabled>${teamWithFlag(h)}</button>
+        <span class="vs-sep">vs</span>
+        <button class="team-btn" disabled>${teamWithFlag(a)}</button>
+      </div>
+    </div>`).join('');
+
+  const bracketPreview = `
+    <details class="bracket-preview-section">
+      <summary>👀 Preview what bracket picking looks like</summary>
+      <p class="bracket-preview-note">Example layout — real matchups reveal on June 28 after group stage ends. You'll pick the winner of each game before each round starts.</p>
+      <div class="bracket-cards">${demoCards}</div>
+    </details>`;
+
   const roundsHTML = phase === 'pre' || phase === 'group'
-    ? `<div class="banner banner-info">Bracket picks open after the group stage ends (June 27). Come back then to fill out each round as teams advance.</div>`
+    ? `<div class="banner banner-info">Bracket picks open June 28 after the group stage ends. As each round is set, you'll pick winners round-by-round.</div>${bracketPreview}`
     : ROUNDS.map(r => renderRound(r)).join('');
 
   const user = Auth.getUser();
