@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>World Cup Pool 2026</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>%E2%9A%BD</text></svg>">
+  <title>⚽ World Cup Pool 2026</title>
+  <link rel="stylesheet" href="style.css?v=20260608b">
 </head>
 <body>
 
@@ -26,17 +27,19 @@
   <!-- Main content -->
   <main id="main"></main>
 
-  <!-- Scripts — order matters -->
-  <script src="js/config.js"></script>
-  <script src="js/data/fixtures.js"></script>
-  <script src="js/api.js"></script>
-  <script src="js/auth.js"></script>
-  <script src="js/router.js"></script>
-  <script src="js/views/picks.js"></script>
-  <script src="js/views/bracket.js"></script>
-  <script src="js/views/macro.js"></script>
-  <script src="js/views/leaderboard.js"></script>
-  <script src="js/views/admin.js"></script>
+  <!-- Scripts — loaded in order with a cache-busting version.
+       Bump APP_VERSION (and the ?v on the CSS link above) after any change
+       so browsers fetch fresh files instead of a stale cached copy. -->
+  <script>
+    window.APP_VERSION = '20260608b';
+    [
+      'js/config.js','js/data/fixtures.js','js/api.js','js/auth.js','js/router.js',
+      'js/views/picks.js','js/views/bracket.js','js/views/macro.js',
+      'js/views/leaderboard.js','js/views/admin.js'
+    ].forEach(function (src) {
+      document.write('<script src="' + src + '?v=' + window.APP_VERSION + '"><\/script>');
+    });
+  </script>
   <script>
     Auth.init();
     document.getElementById('logout-btn').addEventListener('click', () => Auth.logout());

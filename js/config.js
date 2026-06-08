@@ -8,7 +8,7 @@ window.CONFIG = {
     group: { exact: 5, result: 2, wrong: 0 },
     bracket: { R32: 3, R16: 5, QF: 8, SF: 12, Final: 18 },
     champion_bonus: 25,
-    macro: { champion: 20, runner_up: 15, top_scorer: 10 }
+    macro: { runner_up: 15, third_place: 10, golden_ball: 10, golden_boot: 10, golden_glove: 10 }
   },
 
   PRIZE_SPLIT: { first: 0.60, second: 0.25, group: 0.15 },

@@ -1,4 +1,5 @@
 // ── Macro Picks ───────────────────────────────────────────────────────────────
+// Runner-up + 3rd place = team dropdowns. Golden Ball/Boot/Glove = free-text player names.
 
 Router.register('macro', async function(container) {
   const [picksData, configData] = await Promise.all([
@@ -7,42 +8,45 @@ Router.register('macro', async function(container) {
   ]);
 
   const existing = picksData.macro_picks || {};
-  const locked = configData.picks_locked || configData.tournament_status !== 'pre';
-  const teams = window.ALL_TEAMS;
+  const locked   = configData.picks_locked || configData.tournament_status !== 'pre';
+  const teams    = window.ALL_TEAMS;
+  const PTS       = CONFIG.SCORING.macro;
 
-  function teamOption(name, selected) {
-    return `<option value="${name}" ${selected === name ? 'selected' : ''}>${teamFlag(name)} ${name}</option>`;
+  function teamSelect(id, value) {
+    const opts = `<option value="">-- Pick a team --</option>` +
+      teams.map(t => `<option value="${t}" ${value === t ? 'selected' : ''}>${teamFlag(t)} ${t}</option>`).join('');
+    return `<select id="${id}">${opts}</select>`;
   }
 
-  const allOptions = `<option value="">-- Pick a team --</option>` + teams.map(t => teamOption(t, '')).join('');
-
-  const lockBanner = locked
-    ? `<div class="banner banner-warning">⏰ Macro picks are locked for this tournament.</div>`
-    : `<div class="banner banner-info">Pick once. Locked when the tournament starts. Champion=20 pts, Runner-up=15 pts, Top Scorer=10 pts.</div>`;
-
-  function scoreDisplay(pts, label) {
-    if (pts === undefined || pts === '') return '';
-    return pts > 0
+  function scoreBadge(pts) {
+    if (pts === undefined || pts === '' || pts === null) return '';
+    return Number(pts) > 0
       ? `<span class="pts-exact">✓ ${pts} pts</span>`
       : `<span class="pts-wrong">✗ 0 pts</span>`;
   }
 
-  const champPts = existing.champion_pts;
-  const ruPts    = existing.runner_up_pts;
-  const tsPts    = existing.top_scorer_pts;
-
-  function buildSelect(id, label, value, pts) {
-    const opts = `<option value="">-- Pick a team --</option>` + teams.map(t => teamOption(t, value)).join('');
+  // Build one row. type: 'team' | 'player'
+  function row(id, icon, label, ptsValue, value, type, points) {
+    let control;
+    if (locked) {
+      const shown = type === 'team' ? (value ? teamWithFlag(value) : '—') : (value || '—');
+      control = `<span class="macro-locked-val">${shown}</span>`;
+    } else if (type === 'team') {
+      control = teamSelect(id, value);
+    } else {
+      control = `<input type="text" id="${id}" value="${value ? String(value).replace(/"/g,'&quot;') : ''}" placeholder="Player name" autocomplete="off">`;
+    }
     return `
       <div class="macro-row">
-        <label for="${id}">${label}</label>
-        ${locked
-          ? `<span class="macro-locked-val">${value ? teamWithFlag(value) : '—'}</span>`
-          : `<select id="${id}">${opts}</select>`
-        }
-        ${scoreDisplay(pts, label)}
+        <label for="${id}">${icon} ${label} <span class="macro-pts">${points} pts</span></label>
+        ${control}
+        ${scoreBadge(ptsValue)}
       </div>`;
   }
+
+  const lockBanner = locked
+    ? `<div class="banner banner-warning">⏰ Macro picks are locked for this tournament.</div>`
+    : `<div class="banner banner-info">Pick once — locked when the tournament starts (June 11). Champion isn't here because it's already rewarded in the bracket.</div>`;
 
   const user = Auth.getUser();
   container.innerHTML = `
@@ -54,14 +58,18 @@ Router.register('macro', async function(container) {
       ${lockBanner}
       <div class="macro-card">
         <div class="scoring-legend">
-          <span>🏆 Champion = 20 pts</span>
-          <span>🥈 Runner-up = 15 pts</span>
-          <span>👟 Top Scorer = 10 pts</span>
+          <span>🥈 Runner-up = ${PTS.runner_up}</span>
+          <span>🥉 3rd Place = ${PTS.third_place}</span>
+          <span>⚽ Golden Ball = ${PTS.golden_ball}</span>
+          <span>👟 Golden Boot = ${PTS.golden_boot}</span>
+          <span>🧤 Golden Glove = ${PTS.golden_glove}</span>
         </div>
         <form id="macro-form">
-          ${buildSelect('macro-champion', '🏆 Champion', existing.champion, champPts)}
-          ${buildSelect('macro-runner-up', '🥈 Runner-up', existing.runner_up, ruPts)}
-          ${buildSelect('macro-top-scorer', '👟 Top Scorer (Golden Boot)', existing.top_scorer, tsPts)}
+          ${row('m-runner-up',   '🥈', 'Runner-up',    existing.runner_up_pts,    existing.runner_up,    'team',   PTS.runner_up)}
+          ${row('m-third',       '🥉', 'Third Place',  existing.third_place_pts,  existing.third_place,  'team',   PTS.third_place)}
+          ${row('m-ball',        '⚽', 'Golden Ball (Best Player)',  existing.golden_ball_pts,  existing.golden_ball,  'player', PTS.golden_ball)}
+          ${row('m-boot',        '👟', 'Golden Boot (Top Scorer)',   existing.golden_boot_pts,  existing.golden_boot,  'player', PTS.golden_boot)}
+          ${row('m-glove',       '🧤', 'Golden Glove (Best Keeper)', existing.golden_glove_pts, existing.golden_glove, 'player', PTS.golden_glove)}
           ${!locked ? `
             <button type="submit" class="btn-primary">Save Macro Picks</button>
             <p id="macro-status" class="status-msg hidden"></p>
@@ -77,17 +85,22 @@ Router.register('macro', async function(container) {
     e.preventDefault();
     const btn = e.target.querySelector('button[type=submit]');
     const statusEl = document.getElementById('macro-status');
-    const champion   = document.getElementById('macro-champion').value;
-    const runner_up  = document.getElementById('macro-runner-up').value;
-    const top_scorer = document.getElementById('macro-top-scorer').value;
 
-    if (!champion || !runner_up || !top_scorer) {
-      statusEl.textContent = 'Please fill in all three picks.';
+    const picks = {
+      runner_up:    document.getElementById('m-runner-up').value,
+      third_place:  document.getElementById('m-third').value,
+      golden_ball:  document.getElementById('m-ball').value.trim(),
+      golden_boot:  document.getElementById('m-boot').value.trim(),
+      golden_glove: document.getElementById('m-glove').value.trim()
+    };
+
+    if (Object.values(picks).some(v => !v)) {
+      statusEl.textContent = 'Please fill in all five picks.';
       statusEl.className = 'status-msg error';
       return;
     }
-    if (champion === runner_up) {
-      statusEl.textContent = 'Champion and Runner-up must be different teams.';
+    if (picks.runner_up === picks.third_place) {
+      statusEl.textContent = 'Runner-up and 3rd place must be different teams.';
       statusEl.className = 'status-msg error';
       return;
     }
@@ -96,7 +109,7 @@ Router.register('macro', async function(container) {
     btn.textContent = 'Saving…';
     statusEl.className = 'status-msg hidden';
     try {
-      const res = await API.postAuth({ action: 'submitMacroPicks', picks: { champion, runner_up, top_scorer } });
+      const res = await API.postAuth({ action: 'submitMacroPicks', picks });
       if (res.error) throw new Error(res.error);
       statusEl.textContent = '✓ Macro picks saved!';
       statusEl.className = 'status-msg success';

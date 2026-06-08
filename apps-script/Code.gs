@@ -251,19 +251,35 @@ function handleSubmitBracketPick(userId, round, matchIndex, teamPicked) {
 
 function handleSubmitMacroPicks(userId, picks) {
   if (getConfig('picks_locked') === 'true') return { error: 'Picks are locked' };
-  if (!picks || !picks.champion || !picks.runner_up || !picks.top_scorer) return { error: 'Missing macro pick fields' };
+  if (!picks) return { error: 'Missing macro picks' };
+
+  var required = ['runner_up', 'third_place', 'golden_ball', 'golden_boot', 'golden_glove'];
+  for (var k = 0; k < required.length; k++) {
+    if (!picks[required[k]] || String(picks[required[k]]).trim() === '') {
+      return { error: 'Please fill in all five macro picks' };
+    }
+  }
 
   var s = sheet('MacroPicks');
+  var headers = s.getDataRange().getValues()[0];
+  var vals = {
+    user_id:        userId,
+    runner_up:      picks.runner_up,
+    third_place:    picks.third_place,
+    golden_ball:    picks.golden_ball,
+    golden_boot:    picks.golden_boot,
+    golden_glove:   picks.golden_glove,
+    runner_up_pts: '', third_place_pts: '', golden_ball_pts: '',
+    golden_boot_pts: '', golden_glove_pts: ''
+  };
+
   var existingRow = findRow('MacroPicks', 'user_id', userId);
   if (existingRow > 0) {
-    s.getRange(existingRow, 2).setValue(picks.champion);
-    s.getRange(existingRow, 3).setValue(picks.runner_up);
-    s.getRange(existingRow, 4).setValue(picks.top_scorer);
-    s.getRange(existingRow, 5).setValue('');
-    s.getRange(existingRow, 6).setValue('');
-    s.getRange(existingRow, 7).setValue('');
+    headers.forEach(function(h, i) {
+      if (vals[h] !== undefined) s.getRange(existingRow, i + 1).setValue(vals[h]);
+    });
   } else {
-    s.appendRow([userId, picks.champion, picks.runner_up, picks.top_scorer, '', '', '']);
+    s.appendRow(headers.map(function(h) { return vals[h] !== undefined ? vals[h] : ''; }));
   }
   return { success: true };
 }
@@ -271,6 +287,16 @@ function handleSubmitMacroPicks(userId, picks) {
 function handleOverrideResult(fixtureId, homeScore, awayScore, adminPw) {
   if (!verifyAdmin(adminPw)) return { error: 'Unauthorized' };
   return updateFixtureResult(fixtureId, homeScore, awayScore);
+}
+
+function handleUpsertKnockout(body) {
+  if (!verifyAdmin(body.admin_password)) return { error: 'Unauthorized' };
+  return upsertKnockoutFixture(body.round, body.match_index, body.home, body.away, body.home_score, body.away_score);
+}
+
+function handleEnterMacroAnswers(body) {
+  if (!verifyAdmin(body.admin_password)) return { error: 'Unauthorized' };
+  return scoreMacroPicks(body.answers || {});
 }
 
 function handleSetPaid(userId, paid, adminPw) {
@@ -363,6 +389,8 @@ function doPost(e) {
         return jsonOut(handleSubmitMacroPicks(u3.id, body.picks));
       }
       case 'overrideResult':    return jsonOut(handleOverrideResult(body.fixture_id, body.home_score, body.away_score, body.admin_password));
+      case 'upsertKnockout':    return jsonOut(handleUpsertKnockout(body));
+      case 'enterMacroAnswers': return jsonOut(handleEnterMacroAnswers(body));
       case 'setPaid':           return jsonOut(handleSetPaid(body.user_id, body.paid, body.admin_password));
       case 'setPhase':          return jsonOut(handleSetPhase(body.phase, body.admin_password));
       case 'adminGetUsers':     return jsonOut(handleAdminGetUsers(body.admin_password));

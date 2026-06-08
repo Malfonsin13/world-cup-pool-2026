@@ -24,10 +24,10 @@ function createSheets() {
   var headers = {
     Config: [['key','value']],
     Users:  [['id','email','display_name','password_hash','session_token','has_paid','joined_at']],
-    Fixtures: [['id','api_id','phase','group','round','home','away','utc_date','home_score','away_score','status']],
+    Fixtures: [['id','api_id','phase','group','round','match_index','home','away','utc_date','home_score','away_score','status']],
     GroupPredictions: [['user_id','fixture_id','home_pred','away_pred','pts_awarded','updated_at']],
     BracketPredictions: [['user_id','round','match_index','team_picked','is_correct','pts_awarded','updated_at']],
-    MacroPicks: [['user_id','champion','runner_up','top_scorer','champion_pts','runner_up_pts','top_scorer_pts']],
+    MacroPicks: [['user_id','runner_up','third_place','golden_ball','golden_boot','golden_glove','runner_up_pts','third_place_pts','golden_ball_pts','golden_boot_pts','golden_glove_pts']],
     Leaderboard: [['user_id','display_name','group_pts','bracket_pts','macro_pts','total','rank']]
   };
 
@@ -148,6 +148,43 @@ function populateFixtures() {
     [72,'',  'group','L',3,'Croatia','Ghana','2026-06-27T21:00:00Z','','','pending'],
   ];
 
-  fixtures.forEach(function(row) { s.appendRow(row); });
+  // Rows above are [id,api_id,phase,group,round,home,away,utc,hs,as,status].
+  // Insert an empty match_index after 'round' (index 5) to match the schema.
+  fixtures.forEach(function(row) {
+    var r = row.slice();
+    r.splice(5, 0, '');
+    s.appendRow(r);
+  });
   Logger.log('72 group stage fixtures populated');
+}
+
+// ── Migration: run ONCE to upgrade an already-initialised spreadsheet ──────────
+// Safe to run if you set the sheet up with the older schema. It:
+//  1. Adds the 'match_index' column to Fixtures (for knockout bracket alignment)
+//  2. Rebuilds MacroPicks with the new schema (runner-up, 3rd place, golden awards)
+// No real macro picks exist yet at launch, so wiping MacroPicks data is safe.
+
+function migrateV2() {
+  // 1. Fixtures — add match_index after 'round'
+  var fx = SS.getSheetByName('Fixtures');
+  var fh = fx.getRange(1, 1, 1, fx.getLastColumn()).getValues()[0];
+  if (fh.indexOf('match_index') === -1) {
+    var roundIdx = fh.indexOf('round'); // 0-based
+    fx.insertColumnAfter(roundIdx + 1);
+    fx.getRange(1, roundIdx + 2).setValue('match_index');
+    Logger.log('Added match_index column to Fixtures');
+  } else {
+    Logger.log('Fixtures already has match_index');
+  }
+
+  // 2. MacroPicks — rebuild with new schema
+  var mp = SS.getSheetByName('MacroPicks');
+  mp.clear();
+  mp.getRange(1, 1, 1, 11).setValues([[
+    'user_id','runner_up','third_place','golden_ball','golden_boot','golden_glove',
+    'runner_up_pts','third_place_pts','golden_ball_pts','golden_boot_pts','golden_glove_pts'
+  ]]);
+  Logger.log('MacroPicks rebuilt with new schema');
+
+  Logger.log('Migration V2 complete.');
 }

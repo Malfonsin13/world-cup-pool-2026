@@ -4,7 +4,27 @@
 
 var BRACKET_PTS = { R32: 3, R16: 5, QF: 8, SF: 12, Final: 18 };
 var CHAMPION_BONUS = 25;
-var MACRO_PTS = { champion: 20, runner_up: 15, top_scorer: 10 };
+var MACRO_PTS = { runner_up: 15, third_place: 10, golden_ball: 10, golden_boot: 10, golden_glove: 10 };
+
+// Normalize team names so our fixtures match the worldcup26.ir API names.
+// Maps a lowercased, trimmed name to our canonical fixture name.
+var TEAM_NAME_ALIASES = {
+  'united states': 'USA', 'usa': 'USA', 'us': 'USA',
+  'korea republic': 'South Korea', 'south korea': 'South Korea', 'republic of korea': 'South Korea',
+  'turkey': 'Türkiye', 'turkiye': 'Türkiye', 'türkiye': 'Türkiye',
+  'ivory coast': 'Ivory Coast', "cote d'ivoire": 'Ivory Coast', "côte d'ivoire": 'Ivory Coast',
+  'dr congo': 'DR Congo', 'congo dr': 'DR Congo', 'democratic republic of the congo': 'DR Congo',
+  'czech republic': 'Czechia', 'czechia': 'Czechia',
+  'bosnia and herzegovina': 'Bosnia-Herzegovina', 'bosnia-herzegovina': 'Bosnia-Herzegovina', 'bosnia': 'Bosnia-Herzegovina',
+  'cape verde': 'Cape Verde', 'cabo verde': 'Cape Verde',
+  'curacao': 'Curacao', 'curaçao': 'Curacao'
+};
+
+function canonTeam(name) {
+  if (!name) return '';
+  var key = String(name).trim().toLowerCase();
+  return TEAM_NAME_ALIASES[key] || String(name).trim();
+}
 
 // ── Auto-fetch results from worldcup26.ir ─────────────────────────────────────
 
@@ -26,17 +46,21 @@ function autoFetchResults() {
 
     var updated = false;
     games.forEach(function(game) {
-      // Accept either 'finished' or 'completed' or 'FT' depending on API
-      var finished = game.status === 'finished' || game.status === 'completed' ||
-                     game.status === 'FT' || game.finished === true;
+      // API returns finished as the STRING "TRUE"/"FALSE"
+      var finishedRaw = game.finished;
+      var finished = finishedRaw === true || finishedRaw === 'TRUE' || finishedRaw === 'true' ||
+                     game.status === 'finished' || game.status === 'FT';
       if (!finished) return;
 
-      var fixtureRow = findFixtureByApiId(game.id || game.match_id);
+      // Match by team names (robust — api_id scheme is not guaranteed)
+      var apiHome = canonTeam(game.home_team_name_en || game.home_team || game.home);
+      var apiAway = canonTeam(game.away_team_name_en || game.away_team || game.away);
+      var fixtureRow = findFixtureByTeams(apiHome, apiAway);
       if (!fixtureRow) return;
       if (fixtureRow.status === 'final') return; // already scored
 
-      var homeScore = parseInt(game.home_score || game.goals_home || game.score_home, 10);
-      var awayScore = parseInt(game.away_score || game.goals_away || game.score_away, 10);
+      var homeScore = parseInt(game.home_score, 10);
+      var awayScore = parseInt(game.away_score, 10);
       if (isNaN(homeScore) || isNaN(awayScore)) return;
 
       updateFixtureResult(fixtureRow.id, homeScore, awayScore);
@@ -49,27 +73,105 @@ function autoFetchResults() {
   }
 }
 
-function findFixtureByApiId(apiId) {
-  if (!apiId) return null;
+function findFixtureByTeams(home, away) {
+  if (!home || !away) return null;
   var fixtures = sheetToObjects('Fixtures');
-  return fixtures.find(function(f) { return String(f.api_id) === String(apiId); }) || null;
+  return fixtures.find(function(f) {
+    return canonTeam(f.home) === home && canonTeam(f.away) === away;
+  }) || null;
 }
 
 // ── Result Update ─────────────────────────────────────────────────────────────
 
 function updateFixtureResult(fixtureId, homeScore, awayScore) {
   var s = sheet('Fixtures');
-  var row = findRow('Fixtures', 'id', fixtureId);
+  var data = s.getDataRange().getValues();
+  var headers = data[0];
+  var idCol = headers.indexOf('id');
+
+  var row = -1, fixture = null;
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][idCol]) === String(fixtureId)) {
+      row = i + 1;
+      fixture = {};
+      headers.forEach(function(h, j) { fixture[h] = data[i][j]; });
+      break;
+    }
+  }
   if (row < 0) return { error: 'Fixture not found' };
 
-  var headers = s.getDataRange().getValues()[0];
   s.getRange(row, headers.indexOf('home_score') + 1).setValue(homeScore);
   s.getRange(row, headers.indexOf('away_score') + 1).setValue(awayScore);
   s.getRange(row, headers.indexOf('status') + 1).setValue('final');
 
-  recalculateGroupScores(fixtureId, homeScore, awayScore);
+  if (fixture.phase === 'knockout') {
+    // Determine winner (knockout cannot draw — admin should enter the post-ET/PK score)
+    var winner = homeScore > awayScore ? fixture.home
+               : awayScore > homeScore ? fixture.away : null;
+    if (winner) recalculateBracketScores(fixture.round, fixture.match_index, winner);
+  } else {
+    recalculateGroupScores(fixtureId, homeScore, awayScore);
+  }
+
   rebuildLeaderboard();
   return { success: true };
+}
+
+// ── Knockout fixture upsert ───────────────────────────────────────────────────
+// Creates or updates a knockout matchup by round + match_index, optionally with
+// a result. If scores are provided, marks final and scores bracket picks.
+
+function upsertKnockoutFixture(round, matchIndex, home, away, homeScore, awayScore) {
+  if (!round || !matchIndex || !home || !away) return { error: 'Missing round/match/teams' };
+
+  var s = sheet('Fixtures');
+  var data = s.getDataRange().getValues();
+  var headers = data[0];
+  var roundCol = headers.indexOf('round');
+  var idxCol   = headers.indexOf('match_index');
+  var phaseCol = headers.indexOf('phase');
+  var idCol    = headers.indexOf('id');
+
+  var hasResult = (homeScore !== '' && homeScore != null && awayScore !== '' && awayScore != null);
+
+  // Find existing knockout fixture for this round + match_index
+  var existingRow = -1, existingId = null;
+  var maxId = 0;
+  for (var i = 1; i < data.length; i++) {
+    var rid = Number(data[i][idCol]); if (rid > maxId) maxId = rid;
+    if (data[i][phaseCol] === 'knockout' &&
+        data[i][roundCol] === round &&
+        String(data[i][idxCol]) === String(matchIndex)) {
+      existingRow = i + 1;
+      existingId = data[i][idCol];
+    }
+  }
+
+  if (existingRow > 0) {
+    s.getRange(existingRow, headers.indexOf('home') + 1).setValue(home);
+    s.getRange(existingRow, headers.indexOf('away') + 1).setValue(away);
+    if (hasResult) {
+      return updateFixtureResult(existingId, parseInt(homeScore, 10), parseInt(awayScore, 10));
+    }
+    return { success: true, id: existingId };
+  }
+
+  // Create a new knockout fixture row
+  var newId = maxId + 1;
+  var rowObj = {
+    id: newId, api_id: '', phase: 'knockout', group: '', round: round,
+    match_index: matchIndex, home: home, away: away, utc_date: '',
+    home_score: hasResult ? parseInt(homeScore, 10) : '',
+    away_score: hasResult ? parseInt(awayScore, 10) : '',
+    status: hasResult ? 'final' : 'pending'
+  };
+  var newRow = headers.map(function(h) { return rowObj[h] !== undefined ? rowObj[h] : ''; });
+  s.appendRow(newRow);
+
+  if (hasResult) {
+    return updateFixtureResult(newId, parseInt(homeScore, 10), parseInt(awayScore, 10));
+  }
+  return { success: true, id: newId };
 }
 
 // ── Group Stage Scoring ───────────────────────────────────────────────────────
@@ -133,21 +235,43 @@ function recalculateBracketScores(round, matchIndex, winner) {
 }
 
 // ── Macro Scoring ─────────────────────────────────────────────────────────────
+// answers = { runner_up, third_place, golden_ball, golden_boot, golden_glove }
+// Any provided field is scored; omitted/blank fields are left untouched.
+// Team picks (runner_up, third_place) match exactly; player awards match
+// case-insensitively and trimmed since they're free-text.
 
-function scoreMacroPicks(champion, runnerUp, topScorer) {
-  var macros = sheetToObjects('MacroPicks');
-  var s = sheet('MacroPicks');
+function norm(v) { return String(v == null ? '' : v).trim().toLowerCase(); }
+
+function scoreMacroPicks(answers) {
+  var macros  = sheetToObjects('MacroPicks');
+  var s       = sheet('MacroPicks');
   var headers = s.getDataRange().getValues()[0];
-  var champPtsCol = headers.indexOf('champion_pts') + 1;
-  var ruPtsCol    = headers.indexOf('runner_up_pts') + 1;
-  var tsPtsCol    = headers.indexOf('top_scorer_pts') + 1;
+
+  var cols = {
+    runner_up:    headers.indexOf('runner_up_pts') + 1,
+    third_place:  headers.indexOf('third_place_pts') + 1,
+    golden_ball:  headers.indexOf('golden_ball_pts') + 1,
+    golden_boot:  headers.indexOf('golden_boot_pts') + 1,
+    golden_glove: headers.indexOf('golden_glove_pts') + 1
+  };
+
+  var teamFields   = ['runner_up', 'third_place'];
+  var playerFields = ['golden_ball', 'golden_boot', 'golden_glove'];
 
   macros.forEach(function(row, i) {
-    var sheetRow = i + 2; // +1 header +1 1-indexed
-    if (champion)  s.getRange(sheetRow, champPtsCol).setValue(row.champion  === champion  ? MACRO_PTS.champion  : 0);
-    if (runnerUp)  s.getRange(sheetRow, ruPtsCol).setValue(row.runner_up   === runnerUp   ? MACRO_PTS.runner_up  : 0);
-    if (topScorer) s.getRange(sheetRow, tsPtsCol).setValue(row.top_scorer  === topScorer  ? MACRO_PTS.top_scorer : 0);
+    var sheetRow = i + 2; // +1 header, +1 for 1-indexing
+    teamFields.forEach(function(f) {
+      if (!answers[f]) return;
+      s.getRange(sheetRow, cols[f]).setValue(row[f] === answers[f] ? MACRO_PTS[f] : 0);
+    });
+    playerFields.forEach(function(f) {
+      if (!answers[f]) return;
+      s.getRange(sheetRow, cols[f]).setValue(norm(row[f]) === norm(answers[f]) ? MACRO_PTS[f] : 0);
+    });
   });
+
+  rebuildLeaderboard();
+  return { success: true };
 }
 
 // ── Leaderboard Rebuild ───────────────────────────────────────────────────────
@@ -168,7 +292,13 @@ function rebuildLeaderboard() {
       .reduce(function(sum, r) { return sum + (Number(r.pts_awarded) || 0); }, 0);
 
     var mrow  = macroPicks.find(function(r) { return r.user_id === u.id; });
-    var mpts  = mrow ? (Number(mrow.champion_pts) || 0) + (Number(mrow.runner_up_pts) || 0) + (Number(mrow.top_scorer_pts) || 0) : 0;
+    var mpts  = mrow
+      ? (Number(mrow.runner_up_pts)    || 0) +
+        (Number(mrow.third_place_pts)  || 0) +
+        (Number(mrow.golden_ball_pts)  || 0) +
+        (Number(mrow.golden_boot_pts)  || 0) +
+        (Number(mrow.golden_glove_pts) || 0)
+      : 0;
 
     return {
       user_id:      u.id,

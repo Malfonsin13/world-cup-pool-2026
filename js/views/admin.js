@@ -110,6 +110,10 @@ Router.register('admin', async function(container) {
     const phaseOptions = ['pre','group','knockout','done'].map(p =>
       `<option value="${p}" ${p === phase ? 'selected' : ''}>${p}</option>`).join('');
 
+    const teamOpts = '<option value="">-- team --</option>' +
+      (window.ALL_TEAMS || []).map(t => `<option value="${t}">${t}</option>`).join('');
+    const roundOpts = CONFIG.ROUNDS.map(r => `<option value="${r}">${r}</option>`).join('');
+
     container.innerHTML = `
       <div class="page-admin">
         <div class="page-header">
@@ -151,6 +155,78 @@ Router.register('admin', async function(container) {
                 <p id="override-status" class="status-msg hidden"></p>
               </form>`
           }
+        </div>
+
+        <!-- Knockout result entry -->
+        <div class="admin-card">
+          <h2>Knockout Bracket Results</h2>
+          <p>Used from June 28. Set the two teams, the round, and the match number (left-to-right, top-to-bottom on the bracket), then enter the result. Use the score <em>after</em> extra-time/penalties so there's a clear winner. This scores everyone's bracket picks for that slot.</p>
+          <form id="knockout-form">
+            <div class="score-row">
+              <div class="field">
+                <label>Round</label>
+                <select id="ko-round">${roundOpts}</select>
+              </div>
+              <div class="field">
+                <label>Match # (slot)</label>
+                <input type="number" id="ko-idx" min="1" max="16" value="1" required>
+              </div>
+            </div>
+            <div class="score-row">
+              <div class="field">
+                <label>Home Team</label>
+                <select id="ko-home">${teamOpts}</select>
+              </div>
+              <div class="field">
+                <label>Away Team</label>
+                <select id="ko-away">${teamOpts}</select>
+              </div>
+            </div>
+            <div class="score-row">
+              <div class="field">
+                <label>Home Score</label>
+                <input type="number" id="ko-home-score" min="0" max="30">
+              </div>
+              <span class="score-sep-admin">:</span>
+              <div class="field">
+                <label>Away Score</label>
+                <input type="number" id="ko-away-score" min="0" max="30">
+              </div>
+            </div>
+            <button type="submit" class="btn-primary">Save Knockout Result</button>
+            <p class="admin-hint">Leave scores blank to just set the matchup (so players can pick before kickoff). Fill scores to record the final.</p>
+            <p id="ko-status" class="status-msg hidden"></p>
+          </form>
+        </div>
+
+        <!-- Macro answers -->
+        <div class="admin-card">
+          <h2>Macro Pick Answers</h2>
+          <p>Enter at tournament end to score macro picks. Fill only the ones that are decided — each saves independently. Player names match case-insensitively, but spell them as players entered them.</p>
+          <form id="macro-answers-form">
+            <div class="field">
+              <label>🥈 Runner-up (team)</label>
+              <select id="ma-runner-up">${teamOpts}</select>
+            </div>
+            <div class="field">
+              <label>🥉 Third Place (team)</label>
+              <select id="ma-third">${teamOpts}</select>
+            </div>
+            <div class="field">
+              <label>⚽ Golden Ball (player)</label>
+              <input type="text" id="ma-ball" placeholder="Player name">
+            </div>
+            <div class="field">
+              <label>👟 Golden Boot (player)</label>
+              <input type="text" id="ma-boot" placeholder="Player name">
+            </div>
+            <div class="field">
+              <label>🧤 Golden Glove (player)</label>
+              <input type="text" id="ma-glove" placeholder="Player name">
+            </div>
+            <button type="submit" class="btn-primary">Score Macro Picks</button>
+            <p id="macro-answers-status" class="status-msg hidden"></p>
+          </form>
         </div>
 
         <!-- Tournament phase -->
@@ -230,6 +306,82 @@ Router.register('admin', async function(container) {
         if (!res.error) setTimeout(() => renderAdminPanel(users), 1500);
       });
     }
+
+    // Knockout result entry
+    document.getElementById('knockout-form').addEventListener('submit', async e => {
+      e.preventDefault();
+      const btn = e.target.querySelector('button[type=submit]');
+      const st  = document.getElementById('ko-status');
+      const home = document.getElementById('ko-home').value;
+      const away = document.getElementById('ko-away').value;
+      const hs   = document.getElementById('ko-home-score').value;
+      const as   = document.getElementById('ko-away-score').value;
+
+      if (!home || !away) {
+        st.textContent = 'Pick both teams.';
+        st.className = 'status-msg error';
+        return;
+      }
+      if (home === away) {
+        st.textContent = 'Home and away must be different teams.';
+        st.className = 'status-msg error';
+        return;
+      }
+      const hasScore = hs !== '' && as !== '';
+      if (hasScore && parseInt(hs) === parseInt(as)) {
+        st.textContent = 'Knockout games need a winner — enter the score after ET/penalties.';
+        st.className = 'status-msg error';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+      const res = await API.post({
+        action: 'upsertKnockout',
+        round: document.getElementById('ko-round').value,
+        match_index: parseInt(document.getElementById('ko-idx').value),
+        home, away,
+        home_score: hasScore ? parseInt(hs) : '',
+        away_score: hasScore ? parseInt(as) : '',
+        admin_password: adminPw
+      });
+      st.textContent = res.error ? 'Error: ' + res.error
+        : (hasScore ? '✓ Result saved — bracket picks scored.' : '✓ Matchup set.');
+      st.className = 'status-msg ' + (res.error ? 'error' : 'success');
+      btn.disabled = false;
+      btn.textContent = 'Save Knockout Result';
+    });
+
+    // Macro answers
+    document.getElementById('macro-answers-form').addEventListener('submit', async e => {
+      e.preventDefault();
+      const btn = e.target.querySelector('button[type=submit]');
+      const st  = document.getElementById('macro-answers-status');
+      const answers = {};
+      const ru = document.getElementById('ma-runner-up').value;
+      const tp = document.getElementById('ma-third').value;
+      const gb = document.getElementById('ma-ball').value.trim();
+      const gbo = document.getElementById('ma-boot').value.trim();
+      const gg = document.getElementById('ma-glove').value.trim();
+      if (ru)  answers.runner_up   = ru;
+      if (tp)  answers.third_place  = tp;
+      if (gb)  answers.golden_ball  = gb;
+      if (gbo) answers.golden_boot  = gbo;
+      if (gg)  answers.golden_glove = gg;
+
+      if (Object.keys(answers).length === 0) {
+        st.textContent = 'Fill at least one answer.';
+        st.className = 'status-msg error';
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = 'Scoring…';
+      const res = await API.post({ action: 'enterMacroAnswers', answers, admin_password: adminPw });
+      st.textContent = res.error ? 'Error: ' + res.error : '✓ Macro picks scored — leaderboard updated.';
+      st.className = 'status-msg ' + (res.error ? 'error' : 'success');
+      btn.disabled = false;
+      btn.textContent = 'Score Macro Picks';
+    });
 
     // Phase switch
     document.getElementById('phase-btn').addEventListener('click', async () => {
