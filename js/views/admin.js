@@ -4,7 +4,28 @@ Router.register('admin', async function(container) {
   const user = Auth.getUser();
   let adminPw = sessionStorage.getItem('wcp_admin_pw') || '';
 
-  function renderPasswordGate() {
+  async function renderPasswordGate() {
+    // Only show the first-time setup card when no admin password exists yet.
+    // On error, default to hidden (safer than re-showing setup for a configured pool).
+    let pwSet = true;
+    try { pwSet = !!(await API.get('getConfig')).admin_password_set; } catch (e) {}
+
+    const setupCard = pwSet ? '' : `
+        <div class="admin-card" style="margin-top:1rem;">
+          <h2>First Time Setup</h2>
+          <p style="font-size:.85rem;color:var(--muted);margin-bottom:.75rem;">
+            No password set yet? Create one here. This only works if the admin password field in your Google Sheet's Config tab is empty.
+          </p>
+          <form id="first-time-form">
+            <div class="field">
+              <label>Choose Admin Password</label>
+              <input type="password" id="first-time-pw" required minlength="6" placeholder="min 6 characters">
+            </div>
+            <button type="submit" class="btn-secondary">Set Admin Password</button>
+            <p id="first-time-err" class="error-msg hidden"></p>
+          </form>
+        </div>`;
+
     container.innerHTML = `
       <div class="page-admin">
         <div class="page-header"><h1>Admin Panel</h1></div>
@@ -20,21 +41,7 @@ Router.register('admin', async function(container) {
             <p id="admin-auth-err" class="error-msg hidden"></p>
           </form>
         </div>
-
-        <div class="admin-card" style="margin-top:1rem;">
-          <h2>First Time Setup</h2>
-          <p style="font-size:.85rem;color:var(--muted);margin-bottom:.75rem;">
-            No password set yet? Create one here. This only works if the admin password field in your Google Sheet's Config tab is empty.
-          </p>
-          <form id="first-time-form">
-            <div class="field">
-              <label>Choose Admin Password</label>
-              <input type="password" id="first-time-pw" required minlength="6" placeholder="min 6 characters">
-            </div>
-            <button type="submit" class="btn-secondary">Set Admin Password</button>
-            <p id="first-time-err" class="error-msg hidden"></p>
-          </form>
-        </div>
+        ${setupCard}
       </div>`;
 
     document.getElementById('admin-auth-form').addEventListener('submit', async e => {
@@ -58,7 +65,8 @@ Router.register('admin', async function(container) {
       renderAdminPanel(res.users || []);
     });
 
-    document.getElementById('first-time-form').addEventListener('submit', async e => {
+    const firstTimeForm = document.getElementById('first-time-form');
+    if (firstTimeForm) firstTimeForm.addEventListener('submit', async e => {
       e.preventDefault();
       const newPw = document.getElementById('first-time-pw').value;
       const errEl = document.getElementById('first-time-err');

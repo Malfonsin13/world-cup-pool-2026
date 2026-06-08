@@ -163,10 +163,12 @@ function handleGetLeaderboard() {
 }
 
 function handleGetConfig() {
+  var adminHash = getConfig('admin_password_hash');
   return {
     buy_in: Number(getConfig('buy_in')) || 20,
     tournament_status: getConfig('tournament_status') || 'pre',
-    picks_locked: getConfig('picks_locked') === 'true'
+    picks_locked: getConfig('picks_locked') === 'true',
+    admin_password_set: !!(adminHash && String(adminHash).trim() !== '')
   };
 }
 
