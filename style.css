@@ -396,6 +396,110 @@ body {
 .empty-state { text-align: center; padding: 2rem; color: var(--muted); }
 .lb-note    { font-size: 0.8rem; color: var(--muted); margin-top: 0.75rem; }
 
+/* ── Rules & Payouts ───────────────────────────────────────────────────────── */
+.rules-section {
+  margin-bottom: 2.25rem;
+}
+.rules-section-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.rules-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+}
+.rules-card {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.rules-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+  color: #fff;
+}
+.hdr-green  { background: var(--green); }
+.hdr-blue   { background: #1d4ed8; }
+.hdr-purple { background: #6d28d9; }
+.rules-card-icon { font-size: 1.6rem; flex-shrink: 0; }
+.rules-card-title { font-weight: 700; font-size: 1rem; }
+.rules-card-sub   { font-size: 0.78rem; opacity: .85; margin-top: 1px; }
+
+.pts-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  padding: 0.5rem 0;
+}
+.pts-table td {
+  padding: 0.45rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.pts-table tr:last-child td { border-bottom: none; }
+.pts-table em { color: var(--muted); font-style: italic; font-size: 0.82rem; }
+.pts-val {
+  text-align: right;
+  font-weight: 700;
+  white-space: nowrap;
+  width: 60px;
+}
+.pts-green { color: var(--green); }
+.pts-gold  { color: #b45309; }
+.pts-muted { color: var(--muted); }
+.pts-highlight-row td {
+  background: #f0fdf4;
+  font-weight: 700;
+  border-top: 2px solid var(--border);
+}
+.rules-note {
+  font-size: 0.8rem;
+  color: var(--muted);
+  padding: 0.6rem 1rem;
+  border-top: 1px solid var(--border);
+  background: #f8fafc;
+}
+
+.rules-howto {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.howto-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+.howto-item:last-child { border-bottom: none; }
+.howto-num {
+  background: var(--green);
+  color: #fff;
+  font-weight: 800;
+  font-size: 0.85rem;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
 /* ── Bracket ───────────────────────────────────────────────────────────────── */
 .bracket-scoring-note { font-size: 0.82rem; color: var(--muted); margin-bottom: 1.25rem; }
 .bracket-round { margin-bottom: 2rem; }
