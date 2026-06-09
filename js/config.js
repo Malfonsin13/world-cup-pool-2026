@@ -14,6 +14,9 @@ window.CONFIG = {
   PRIZE_SPLIT: { first: 0.60, second: 0.25, group: 0.15 },
   BUY_IN: 20,
 
+  // Cash App buy-in. CASHTAG without the leading $. The /20 in the link pre-fills the amount.
+  CASHAPP_CASHTAG: 'MarceloAlfonsin',
+
   PHASES: ['pre', 'group', 'knockout', 'done'],
   ROUNDS: ['R32', 'R16', 'QF', 'SF', 'Final']
 };

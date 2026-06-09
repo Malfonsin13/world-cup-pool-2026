@@ -500,6 +500,54 @@ body {
   margin-top: 1px;
 }
 
+/* ── Pay buy-in (Cash App) ─────────────────────────────────────────────────── */
+.pay-card {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.25rem 1.5rem;
+  border-left: 5px solid #00d54b;       /* Cash App green */
+}
+.pay-info { flex: 1; min-width: 240px; }
+.pay-lead { font-size: 0.98rem; margin-bottom: 0.85rem; }
+.cashtag {
+  font-weight: 700;
+  color: #00a838;
+  white-space: nowrap;
+}
+.btn-cashapp {
+  display: inline-block;
+  background: #00d54b;
+  color: #06301a;
+  font-weight: 800;
+  font-size: 1rem;
+  text-decoration: none;
+  padding: 0.7rem 1.4rem;
+  border-radius: 999px;
+  transition: background .15s, transform .05s;
+}
+.btn-cashapp:hover { background: #00c043; }
+.btn-cashapp:active { transform: translateY(1px); }
+.pay-note { font-size: 0.8rem; color: var(--muted); margin-top: 0.85rem; line-height: 1.45; }
+.pay-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+}
+.pay-qr img {
+  width: 160px;
+  height: 160px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #fff;
+}
+.pay-qr-label { font-size: 0.75rem; color: var(--muted); font-weight: 600; }
+
 /* ── Bracket ───────────────────────────────────────────────────────────────── */
 .bracket-scoring-note { font-size: 0.82rem; color: var(--muted); margin-bottom: 1.25rem; }
 .bracket-round { margin-bottom: 2rem; }

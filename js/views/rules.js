@@ -16,6 +16,27 @@ Router.register('rules', async function(container) {
 
   const buyIn = CONFIG.BUY_IN;
 
+  // Cash App buy-in link. The /amount segment pre-fills the dollar amount.
+  const cashtag  = CONFIG.CASHAPP_CASHTAG || '';
+  const cashLink = cashtag ? `https://cash.app/$${cashtag}/${buyIn}` : '';
+  const paySection = cashtag ? `
+      <section class="rules-section">
+        <h2 class="rules-section-title">💵 Pay Your $${buyIn} Buy-In</h2>
+        <div class="pay-card">
+          <div class="pay-info">
+            <p class="pay-lead">Send your <strong>$${buyIn}</strong> via Cash App to <span class="cashtag">$${cashtag}</span>.</p>
+            <a class="btn-cashapp" href="${cashLink}" target="_blank" rel="noopener noreferrer">
+              Pay $${buyIn} on Cash App →
+            </a>
+            <p class="pay-note">Tapping the button (or scanning the code) opens Cash App with the $${buyIn} amount pre-filled. After you send it, you'll be marked as paid — your ✓ shows up on the Leaderboard.</p>
+          </div>
+          <div class="pay-qr">
+            <img src="assets/cashapp-qr.png?v=${window.APP_VERSION || ''}" alt="Cash App QR code for $${cashtag}" width="160" height="160" loading="lazy">
+            <span class="pay-qr-label">Scan to pay</span>
+          </div>
+        </div>
+      </section>` : '';
+
   const prizeSection = poolTotal > 0 ? `
     <div class="prize-boxes">
       <div class="prize-box gold">
@@ -67,6 +88,9 @@ Router.register('rules', async function(container) {
         <h2 class="rules-section-title">💰 Prize Pool</h2>
         ${prizeSection}
       </section>
+
+      <!-- Pay buy-in (Cash App) -->
+      ${paySection}
 
       <!-- Scoring breakdown -->
       <section class="rules-section">
