@@ -844,10 +844,73 @@ body {
 
 /* ── Responsive ────────────────────────────────────────────────────────────── */
 @media (max-width: 640px) {
-  .nav-links { gap: 0; }
-  .nav-link  { padding: 0.35rem 0.5rem; font-size: 0.82rem; }
+  /* ── Nav: wrap so it never forces page-wide horizontal scroll ── */
+  #nav { padding: 0 0.5rem; }
+  .nav-inner {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 50px;
+    gap: 0.4rem 0.5rem;
+    padding: 0.45rem 0;
+  }
+  .nav-brand { font-size: 1rem; }
+  .nav-logout { margin-left: auto; }      /* row 1: brand left, sign-out right */
+  .nav-links {
+    order: 3;
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    justify-content: flex-start;
+  }
+  .nav-link { padding: 0.45rem 0.7rem; font-size: 0.85rem; }
+  .nav-logout { padding: 0.45rem 0.9rem; }
+
+  /* ── Tighter page padding to reclaim width ── */
+  #main { padding: 1rem 0.75rem 2.5rem; }
+
+  /* ── Picks: force table to container width, truncate long team names ── */
+  .fixtures-table { table-layout: fixed; width: 100%; }
   .fixtures-table .fixture-date { display: none; }
-  .t-home, .t-away { font-size: 0.82rem; }
+  .fixtures-table td { padding: 0.5rem 0.2rem; }
+  .match-cell { width: auto; }
+  .pts-cell { width: 40px; font-size: 0.72rem; }
+  .score-input { gap: 3px; }
+  .score-input input[type=number] { width: 36px; padding: 0.3rem 0.15rem; }
+  /* Flex the team cell so the NAME truncates and the flag is never clipped */
+  .t-home, .t-away {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    min-width: 0;
+    font-size: 0.82rem;
+  }
+  .t-home { justify-content: flex-end; }
+  .t-away { justify-content: flex-start; }
+  .t-home .team-name-text, .t-away .team-name-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .match-row .flag-img { flex-shrink: 0; margin: 0; }
+
+  /* ── Stack prize boxes ── */
   .prize-boxes { flex-direction: column; }
   .macro-row label { min-width: unset; width: 100%; }
+
+  /* ── iOS Safari zooms in on focus when input font-size < 16px. Force 16px. ── */
+  .field input, .field select,
+  .score-input input[type=number],
+  .macro-row select, .macro-row input[type=text],
+  .admin-card input, .admin-card select {
+    font-size: 16px;
+  }
+
+  /* ── Cash App pay card: stack info above QR, center it ── */
+  .pay-card { flex-direction: column; align-items: stretch; }
+  .pay-qr { align-self: center; }
+  .btn-cashapp { display: block; text-align: center; }
+
+  /* ── Bracket: hint that the tree pans sideways ── */
+  .btree-scroll-wrap { -webkit-overflow-scrolling: touch; }
 }
