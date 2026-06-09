@@ -118,7 +118,7 @@ window.TEAM_FLAGS = {
 window.teamFlag = name => {
   const code = TEAM_FLAGS[name];
   if (!code) return '';
-  return `<img src="https://flagcdn.com/w20/${code}.png" alt="${name}" class="flag-img">`;
+  return `<img src="https://flagcdn.com/w20/${code}.png" alt="${name}" class="flag-img" loading="lazy" decoding="async">`;
 };
 window.teamWithFlag = (name, flagSide = 'left') =>
   flagSide === 'left'
