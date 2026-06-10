@@ -190,6 +190,7 @@ body {
 .status-msg { font-size: 0.88rem; padding: 0.5rem 0.75rem; border-radius: 6px; margin-top: 0.5rem; }
 .status-msg.success { background: #dcfce7; color: #166534; }
 .status-msg.error   { background: #fee2e2; color: #991b1b; }
+.status-msg.warning { background: #fef9c3; color: #854d0e; }
 .hidden { display: none !important; }
 .error-msg { color: var(--red); font-size: 0.85rem; margin-top: 0.5rem; }
 .loading { text-align: center; padding: 3rem; color: var(--muted); }
@@ -239,6 +240,14 @@ body {
 }
 .fixtures-table tbody tr:hover { background: #f8fafc; }
 .fixtures-table td { padding: 0.55rem 0.4rem; vertical-align: middle; }
+
+/* Locked games (already kicked off): visible but grayed out and unavailable */
+.fixtures-table tbody tr.locked-row { background: #f1f5f9; opacity: 0.6; }
+.fixtures-table tbody tr.locked-row:hover { background: #f1f5f9; }
+.fixtures-table tbody tr.locked-row .t-home,
+.fixtures-table tbody tr.locked-row .t-away,
+.fixtures-table tbody tr.locked-row .score-static { color: var(--muted); }
+.fixtures-table tbody tr.locked-row .fixture-date { font-style: italic; }
 
 .fixture-date { color: var(--muted); font-size: 0.78rem; white-space: nowrap; width: 1%; padding-right: 0.75rem; }
 .match-cell   { width: 100%; }
@@ -499,8 +508,21 @@ body {
   flex-shrink: 0;
   margin-top: 1px;
 }
+.howto-icon {
+  font-size: 1.25rem;
+  width: 28px;
+  text-align: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
 
-/* ── Pay buy-in (Cash App) ─────────────────────────────────────────────────── */
+/* ── Pay buy-in (Cash App + Zelle) ─────────────────────────────────────────── */
+.pay-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1rem;
+  align-items: stretch;
+}
 .pay-card {
   display: flex;
   gap: 1.5rem;
@@ -511,6 +533,12 @@ body {
   box-shadow: var(--shadow);
   padding: 1.25rem 1.5rem;
   border-left: 5px solid #00d54b;       /* Cash App green */
+}
+.pay-card-zelle { border-left-color: #6d1ed4; }   /* Zelle purple */
+.zelle-handle {
+  font-weight: 700;
+  color: #6d1ed4;
+  word-break: break-all;
 }
 .pay-info { flex: 1; min-width: 240px; }
 .pay-lead { font-size: 0.98rem; margin-bottom: 0.85rem; }

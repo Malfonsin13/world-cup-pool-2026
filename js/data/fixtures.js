@@ -125,6 +125,13 @@ window.teamWithFlag = (name, flagSide = 'left') =>
     ? `${teamFlag(name)}<span class="team-name-text">${name}</span>`
     : `<span class="team-name-text">${name}</span>${teamFlag(name)}`;
 
+// Kickoff time in the viewer's local U.S. zone (EDT/CDT/MDT/PDT), never a "GMT-4" offset.
+window.formatKickoff = utc =>
+  new Date(utc).toLocaleString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric',
+    hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
+  });
+
 window.ALL_TEAMS = [
   'Algeria','Argentina','Australia','Austria','Belgium','Bosnia-Herzegovina',
   'Brazil','Canada','Cape Verde','Colombia','Croatia','Curacao','Czechia',

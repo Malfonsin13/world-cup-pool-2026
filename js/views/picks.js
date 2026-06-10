@@ -13,8 +13,15 @@ Router.register('picks', async function(container) {
     });
   }
 
-  const locked = configData.picks_locked || configData.tournament_status !== 'pre';
   const fixtures = window.FIXTURES;
+
+  // Per-game locking driven by the server clock (so a wrong local clock can't cheat the display).
+  const offset = configData.server_time ? (Date.now() - new Date(configData.server_time).getTime()) : 0;
+  const nowMs = () => Date.now() - offset;                 // server-aligned "now"
+  const gameLocked = f => new Date(f.utc).getTime() <= nowMs();
+  const anyOpen = fixtures.some(f => !gameLocked(f));
+  const globalFreeze = !!configData.picks_locked;          // optional admin "freeze everything"
+  const canEdit = anyOpen && !globalFreeze;
 
   // Group by group letter
   const byGroup = {};
@@ -23,9 +30,11 @@ Router.register('picks', async function(container) {
     byGroup[f.group].push(f);
   });
 
-  const lockBanner = locked
-    ? `<div class="banner banner-warning">⏰ Predictions are locked — the tournament has started.</div>`
-    : `<div class="banner banner-info">Submit your score predictions for all 72 group stage games before June 11. 5 pts for exact score, 2 pts for correct result.</div>`;
+  const lockBanner = globalFreeze
+    ? `<div class="banner banner-warning">⏰ Predictions are locked.</div>`
+    : canEdit
+      ? `<div class="banner banner-info">Each game locks at <strong>kickoff</strong> — edit any pick until that game starts. 5 pts exact score, 2 pts correct result. Times shown in your local U.S. time zone.</div>`
+      : `<div class="banner banner-warning">⏰ All games have started — group picks are closed.</div>`;
 
   let groupsHTML = '';
   window.GROUPS.forEach(g => {
@@ -35,24 +44,24 @@ Router.register('picks', async function(container) {
       const pick = existingPicks[f.id] || {};
       const homeVal = pick.home !== undefined ? pick.home : '';
       const awayVal = pick.away !== undefined ? pick.away : '';
-      const hasResult = pick.pts !== undefined && pick.pts !== '';
       const ptsClass = pick.pts == 5 ? 'pts-exact' : pick.pts == 2 ? 'pts-result' : pick.pts == 0 ? 'pts-wrong' : '';
       const ptsLabel = pick.pts == 5 ? '✓ 5' : pick.pts == 2 ? '~ 2' : pick.pts == 0 ? '✗ 0' : '';
-      const kickoff = new Date(f.utc).toLocaleString(undefined, { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', timeZoneName:'short' });
+      const kickoff = formatKickoff(f.utc);
+      const rowLocked = gameLocked(f) || globalFreeze;
 
       rows += `
-        <tr data-id="${f.id}">
-          <td class="fixture-date">${kickoff}</td>
+        <tr data-id="${f.id}" class="${rowLocked ? 'locked-row' : ''}">
+          <td class="fixture-date">${rowLocked ? '🔒 ' : ''}${kickoff}</td>
           <td class="match-cell">
             <div class="match-row">
               <span class="t-home">${teamWithFlag(f.home, 'left')}</span>
               <div class="score-input">
-                ${locked
+                ${rowLocked
                   ? `<span class="score-static">${homeVal !== '' ? homeVal : '—'}</span>`
                   : `<input type="number" class="score-home" min="0" max="20" value="${homeVal}" placeholder="-">`
                 }
                 <span class="score-sep">:</span>
-                ${locked
+                ${rowLocked
                   ? `<span class="score-static">${awayVal !== '' ? awayVal : '—'}</span>`
                   : `<input type="number" class="score-away" min="0" max="20" value="${awayVal}" placeholder="-">`
                 }
@@ -81,14 +90,14 @@ Router.register('picks', async function(container) {
         <span class="user-badge">${user.display_name}</span>
       </div>
       ${lockBanner}
-      ${!locked ? `<button id="save-all-btn" class="btn-primary save-btn">Save All Picks</button>` : ''}
+      ${canEdit ? `<button id="save-all-btn" class="btn-primary save-btn">Save All Picks</button>` : ''}
       <div id="picks-status" class="status-msg hidden"></div>
       <div id="groups-container">${groupsHTML}</div>
-      ${!locked ? `<button id="save-all-btn-bottom" class="btn-primary save-btn">Save All Picks</button>` : ''}
+      ${canEdit ? `<button id="save-all-btn-bottom" class="btn-primary save-btn">Save All Picks</button>` : ''}
     </div>
   `;
 
-  if (locked) return;
+  if (!canEdit) return;
 
   function collectAndSave() {
     const picks = [];
@@ -121,8 +130,13 @@ Router.register('picks', async function(container) {
     try {
       const res = await API.postAuth({ action: 'submitGroupPicks', picks });
       if (res.error) throw new Error(res.error);
-      statusEl.textContent = `✓ ${res.saved} picks saved!`;
-      statusEl.className = 'status-msg success';
+      let msg = `✓ ${res.saved} pick${res.saved === 1 ? '' : 's'} saved!`;
+      const rej = (res.rejected || []).length;
+      if (rej) msg += ` ${rej} game${rej === 1 ? '' : 's'} had already started and ${rej === 1 ? 'was' : 'were'} not saved.`;
+      statusEl.textContent = msg;
+      statusEl.className = 'status-msg ' + (rej ? 'warning' : 'success');
+      // Re-render so any games that locked since page load now show as closed.
+      if (rej) setTimeout(() => Router.render('#/picks'), 1800);
     } catch (err) {
       statusEl.textContent = 'Error saving: ' + err.message;
       statusEl.className = 'status-msg error';

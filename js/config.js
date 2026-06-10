@@ -16,6 +16,8 @@ window.CONFIG = {
 
   // Cash App buy-in. CASHTAG without the leading $. The /20 in the link pre-fills the amount.
   CASHAPP_CASHTAG: 'MarceloAlfonsin',
+  // Zelle buy-in handle (email or US phone). No universal link/QR — players send manually.
+  ZELLE_HANDLE: 'malfonsin13@gmail.com',
 
   PHASES: ['pre', 'group', 'knockout', 'done'],
   ROUNDS: ['R32', 'R16', 'QF', 'SF', 'Final']

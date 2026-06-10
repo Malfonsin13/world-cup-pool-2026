@@ -8,7 +8,10 @@ Router.register('macro', async function(container) {
   ]);
 
   const existing = picksData.macro_picks || {};
-  const locked   = configData.picks_locked || configData.tournament_status !== 'pre';
+  // Macro picks lock for everyone at the first game's kickoff (server-clock driven).
+  const offset  = configData.server_time ? (Date.now() - new Date(configData.server_time).getTime()) : 0;
+  const startMs = configData.tournament_start ? new Date(configData.tournament_start).getTime() : null;
+  const locked  = configData.picks_locked || (startMs !== null && (Date.now() - offset) >= startMs);
   const teams    = window.ALL_TEAMS;
   const PTS       = CONFIG.SCORING.macro;
 
@@ -45,8 +48,8 @@ Router.register('macro', async function(container) {
   }
 
   const lockBanner = locked
-    ? `<div class="banner banner-warning">⏰ Macro picks are locked for this tournament.</div>`
-    : `<div class="banner banner-info">Pick once — locked when the tournament starts (June 11). Champion isn't here because it's already rewarded in the bracket.</div>`;
+    ? `<div class="banner banner-warning">⏰ Macro picks are locked — the tournament has started.</div>`
+    : `<div class="banner banner-info">Pick once — locks when the tournament starts (first kickoff). Champion isn't here because it's already rewarded in the bracket.</div>`;
 
   const user = Auth.getUser();
   container.innerHTML = `

@@ -19,22 +19,36 @@ Router.register('rules', async function(container) {
   // Cash App buy-in link. The /amount segment pre-fills the dollar amount.
   const cashtag  = CONFIG.CASHAPP_CASHTAG || '';
   const cashLink = cashtag ? `https://cash.app/$${cashtag}/${buyIn}` : '';
-  const paySection = cashtag ? `
-      <section class="rules-section">
-        <h2 class="rules-section-title">💵 Pay Your $${buyIn} Buy-In</h2>
+  const zelle    = CONFIG.ZELLE_HANDLE || '';
+
+  const cashCard = cashtag ? `
         <div class="pay-card">
           <div class="pay-info">
-            <p class="pay-lead">Send your <strong>$${buyIn}</strong> via Cash App to <span class="cashtag">$${cashtag}</span>.</p>
+            <p class="pay-lead">Cash App — send <strong>$${buyIn}</strong> to <span class="cashtag">$${cashtag}</span>.</p>
             <a class="btn-cashapp" href="${cashLink}" target="_blank" rel="noopener noreferrer">
               Pay $${buyIn} on Cash App →
             </a>
-            <p class="pay-note">Tapping the button (or scanning the code) opens Cash App with the $${buyIn} amount pre-filled. After you send it, you'll be marked as paid — your ✓ shows up on the Leaderboard.</p>
+            <p class="pay-note">Tapping the button (or scanning the code) opens Cash App with the $${buyIn} amount pre-filled.</p>
           </div>
           <div class="pay-qr">
             <img src="assets/cashapp-qr.png?v=${window.APP_VERSION || ''}" alt="Cash App QR code for $${cashtag}" width="160" height="160" loading="lazy">
             <span class="pay-qr-label">Scan to pay</span>
           </div>
-        </div>
+        </div>` : '';
+
+  const zelleCard = zelle ? `
+        <div class="pay-card pay-card-zelle">
+          <div class="pay-info">
+            <p class="pay-lead">Zelle — send <strong>$${buyIn}</strong> to <span class="zelle-handle">${zelle}</span>.</p>
+            <p class="pay-note">Open your bank app → Zelle → send $${buyIn} to the address above. Zelle has no pay link, so enter it manually.</p>
+          </div>
+        </div>` : '';
+
+  const paySection = (cashtag || zelle) ? `
+      <section class="rules-section">
+        <h2 class="rules-section-title">💵 Pay Your $${buyIn} Buy-In</h2>
+        <div class="pay-cards">${cashCard}${zelleCard}</div>
+        <p class="pay-note" style="margin-top:.6rem;">After you send it, the admin marks you as paid — your ✓ shows up on the Leaderboard.</p>
       </section>` : '';
 
   const prizeSection = poolTotal > 0 ? `
@@ -166,6 +180,35 @@ Router.register('rules', async function(container) {
             <p class="rules-note">Champion isn't here — it's already in the bracket with a 25-pt bonus.</p>
           </div>
 
+        </div>
+      </section>
+
+      <!-- When Picks Lock -->
+      <section class="rules-section">
+        <h2 class="rules-section-title">⏰ When Picks Lock</h2>
+        <div class="rules-howto">
+          <div class="howto-item">
+            <span class="howto-icon">⚽</span>
+            <div>
+              <strong>Group games</strong> — each game's pick locks at <strong>kickoff</strong>. You can add or change a pick any time until that game starts. Games already played are locked and grayed out.
+            </div>
+          </div>
+          <div class="howto-item">
+            <span class="howto-icon">🏆</span>
+            <div>
+              <strong>Bracket</strong> — pick the winner of each knockout matchup <strong>before that game kicks off</strong>. The bracket opens once the Round of 32 is set.
+            </div>
+          </div>
+          <div class="howto-item">
+            <span class="howto-icon">🌟</span>
+            <div>
+              <strong>Macro picks</strong> — lock for everyone at the <strong>first game's kickoff</strong> (tournament start). Joining late? You can still pick any group game that hasn't started yet — you just miss the points from games already played.
+            </div>
+          </div>
+          <div class="howto-item">
+            <span class="howto-icon">🕐</span>
+            <div>All kickoff times on the site are shown in your local U.S. time zone (ET / CT / MT / PT).</div>
+          </div>
         </div>
       </section>
 

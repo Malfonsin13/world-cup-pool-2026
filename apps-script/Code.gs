@@ -56,6 +56,24 @@ function getConfig(key) {
   return row ? row.value : null;
 }
 
+// Map of fixture id (as string) → kickoff time string, for per-game lock checks.
+function getFixtureKickoffMap() {
+  var map = {};
+  sheetToObjects('Fixtures').forEach(function(f) { map[String(f.id)] = f.utc_date; });
+  return map;
+}
+
+// Earliest kickoff across all fixtures, in epoch ms (or null). Used as the macro-pick deadline.
+function getTournamentStartMs() {
+  var min = null;
+  sheetToObjects('Fixtures').forEach(function(f) {
+    if (!f.utc_date) return;
+    var t = new Date(f.utc_date).getTime();
+    if (!isNaN(t) && (min === null || t < min)) min = t;
+  });
+  return min;
+}
+
 function setConfig(key, value) {
   var s = sheet('Config');
   var data = s.getDataRange().getValues();
@@ -164,11 +182,14 @@ function handleGetLeaderboard() {
 
 function handleGetConfig() {
   var adminHash = getConfig('admin_password_hash');
+  var startMs = getTournamentStartMs();
   return {
     buy_in: Number(getConfig('buy_in')) || 20,
     tournament_status: getConfig('tournament_status') || 'pre',
     picks_locked: getConfig('picks_locked') === 'true',
-    admin_password_set: !!(adminHash && String(adminHash).trim() !== '')
+    admin_password_set: !!(adminHash && String(adminHash).trim() !== ''),
+    server_time: new Date().toISOString(),
+    tournament_start: startMs !== null ? new Date(startMs).toISOString() : null
   };
 }
 
@@ -184,8 +205,12 @@ function handleGetUserPicks(userId) {
 }
 
 function handleSubmitGroupPicks(userId, picks) {
+  // Optional manual "freeze everything" override (defaults false; no longer auto-set by phase).
   if (getConfig('picks_locked') === 'true') return { error: 'Picks are locked' };
   if (!picks || !Array.isArray(picks)) return { error: 'Invalid picks format' };
+
+  var kickoff = getFixtureKickoffMap();
+  var nowMs = Date.now();
 
   var s = sheet('GroupPredictions');
   var data = s.getDataRange().getValues();
@@ -193,8 +218,16 @@ function handleSubmitGroupPicks(userId, picks) {
   var userCol = headers.indexOf('user_id');
   var fixCol = headers.indexOf('fixture_id');
 
+  var saved = 0;
+  var rejected = [];
+
   picks.forEach(function(pick) {
     var fixtureId = pick.fixture_id;
+
+    // Per-game lock: reject any pick for a game that has already kicked off.
+    var ko = kickoff[String(fixtureId)];
+    if (ko && new Date(ko).getTime() <= nowMs) { rejected.push(fixtureId); return; }
+
     var homePred = parseInt(pick.home_pred, 10);
     var awayPred = parseInt(pick.away_pred, 10);
     if (isNaN(homePred) || isNaN(awayPred) || homePred < 0 || awayPred < 0) return;
@@ -216,11 +249,10 @@ function handleSubmitGroupPicks(userId, picks) {
     } else {
       s.appendRow([userId, fixtureId, homePred, awayPred, '', now]);
     }
+    saved++;
   });
 
-  // Refresh data after writes
-  data = s.getDataRange().getValues();
-  return { success: true, saved: picks.length };
+  return { success: true, saved: saved, rejected: rejected };
 }
 
 function handleSubmitBracketPick(userId, round, matchIndex, teamPicked) {
@@ -252,7 +284,10 @@ function handleSubmitBracketPick(userId, round, matchIndex, teamPicked) {
 }
 
 function handleSubmitMacroPicks(userId, picks) {
-  if (getConfig('picks_locked') === 'true') return { error: 'Picks are locked' };
+  var start = getTournamentStartMs();
+  if (start !== null && Date.now() >= start) {
+    return { error: 'Macro picks are locked — the tournament has started' };
+  }
   if (!picks) return { error: 'Missing macro picks' };
 
   var required = ['runner_up', 'third_place', 'golden_ball', 'golden_boot', 'golden_glove'];
@@ -316,7 +351,7 @@ function handleSetPhase(phase, adminPw) {
   var valid = ['pre', 'group', 'knockout', 'done'];
   if (!valid.includes(phase)) return { error: 'Invalid phase' };
   setConfig('tournament_status', phase);
-  if (phase === 'group') setConfig('picks_locked', 'true');
+  // Locking is time-based now (per-game kickoff). Flipping phase must NOT freeze upcoming games.
   return { success: true, phase: phase };
 }
 
