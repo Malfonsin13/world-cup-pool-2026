@@ -6,12 +6,12 @@ Router.register('leaderboard', async function(container) {
   const lb = data.leaderboard || [];
   const currentUser = Auth.getUser();
 
-  const poolTotal = data.pool || 0;
-  const prize1    = data.prize_1st || 0;
-  const prize2    = data.prize_2nd || 0;
-  const prizeGrp  = data.prize_group || 0;
-  const paidCount = data.paid_count || 0;
-  const buyIn     = CONFIG.BUY_IN;
+  const poolTotal   = data.pool || 0;
+  const prize1      = data.prize_1st || 0;
+  const prize2      = data.prize_2nd || 0;
+  const prizeGrp    = data.prize_group || 0;
+  const playerCount = data.player_count != null ? data.player_count : lb.length;
+  const buyIn       = CONFIG.BUY_IN;
 
   const phaseLabel = {
     pre: 'Pre-tournament',
@@ -38,8 +38,8 @@ Router.register('leaderboard', async function(container) {
         <div class="prize-pct">15%</div>
       </div>
     </div>
-    <p class="pool-summary">Pool: <strong>$${poolTotal}</strong> (${paidCount} × $${buyIn})</p>
-  ` : `<p class="pool-summary no-pool">Buy-in: $${buyIn}/person · Pool updates when payments are confirmed by admin.</p>`;
+    <p class="pool-summary">Projected pool: <strong>$${poolTotal}</strong> — ${playerCount} player${playerCount === 1 ? '' : 's'} in × $${buyIn}. Grows as more join!</p>
+  ` : `<p class="pool-summary no-pool">Buy-in: $${buyIn}/person · Be the first to join!</p>`;
 
   // Find best group stage scorer separately
   let bestGroupUserId = null;
@@ -49,11 +49,13 @@ Router.register('leaderboard', async function(container) {
   }
 
   const rows = lb.length === 0
-    ? `<tr><td colspan="6" class="empty-state">No scores yet — check back after games start.</td></tr>`
+    ? `<tr><td colspan="6" class="empty-state">No players yet — be the first to join!</td></tr>`
     : lb.map((row, i) => {
         const isMe = row.user_id === currentUser.id;
         const rank = row.rank || (i + 1);
-        const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`;
+        const hasPoints = (row.total || 0) > 0;
+        // Everyone at 0 shows a neutral dash — no fake leader before points are earned.
+        const medal = !hasPoints ? '–' : rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`;
         const isBestGroup = row.user_id === bestGroupUserId && lb.some(r => r.group_pts > 0);
         return `
           <tr class="${isMe ? 'my-row' : ''} ${isBestGroup ? 'best-group-row' : ''}">

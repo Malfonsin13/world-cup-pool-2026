@@ -174,27 +174,46 @@ function handleGetFixtures() {
 }
 
 function handleGetLeaderboard() {
-  var lb = sheetToObjects('Leaderboard');
-  var config = {
-    buy_in: Number(getConfig('buy_in')) || 20,
-    prize_split_1st: Number(getConfig('prize_split_1st')) || 0.60,
-    prize_split_2nd: Number(getConfig('prize_split_2nd')) || 0.25,
-    prize_split_group: Number(getConfig('prize_split_group')) || 0.15,
-    tournament_status: getConfig('tournament_status') || 'pre'
-  };
-  // Count paid users for prize pool
+  var buyIn  = Number(getConfig('buy_in')) || 20;
+  var split1 = Number(getConfig('prize_split_1st')) || 0.60;
+  var split2 = Number(getConfig('prize_split_2nd')) || 0.25;
+  var splitG = Number(getConfig('prize_split_group')) || 0.15;
+
+  // Index computed scores by user, then show EVERY registered user (0 if unscored)
+  // so the board fills up as people join — even before the tournament starts.
+  var lbById = {};
+  sheetToObjects('Leaderboard').forEach(function(r) { lbById[String(r.user_id)] = r; });
+
   var users = sheetToObjects('Users');
-  var paidCount = users.filter(function(u) { return u.has_paid == true || u.has_paid === 'TRUE'; }).length;
-  var pool = paidCount * config.buy_in;
+  var board = users.map(function(u) {
+    var r  = lbById[String(u.id)] || {};
+    var gp = Number(r.group_pts) || 0, bp = Number(r.bracket_pts) || 0, mp = Number(r.macro_pts) || 0;
+    var total = (r.total !== undefined && r.total !== '') ? Number(r.total) : (gp + bp + mp);
+    return { user_id: u.id, display_name: u.display_name, group_pts: gp, bracket_pts: bp, macro_pts: mp, total: total };
+  });
+
+  // Sort by total desc, then name; tie-aware ranks (equal totals share a rank).
+  board.sort(function(a, b) { return (b.total - a.total) || String(a.display_name).localeCompare(String(b.display_name)); });
+  var lastTotal = null, lastRank = 0;
+  board.forEach(function(m, i) {
+    if (m.total !== lastTotal) { lastRank = i + 1; lastTotal = m.total; }
+    m.rank = lastRank;
+  });
+
+  var paidCount   = users.filter(function(u) { return u.has_paid == true || u.has_paid === 'TRUE'; }).length;
+  var playerCount = users.length;
+  // PROJECTED pool — based on everyone who joined, paid or not, so people see the upside.
+  var pool = playerCount * buyIn;
 
   return {
-    leaderboard: lb,
+    leaderboard: board,
     pool: pool,
+    player_count: playerCount,
     paid_count: paidCount,
-    prize_1st: Math.floor(pool * config.prize_split_1st),
-    prize_2nd: Math.floor(pool * config.prize_split_2nd),
-    prize_group: Math.floor(pool * config.prize_split_group),
-    tournament_status: config.tournament_status
+    prize_1st: Math.floor(pool * split1),
+    prize_2nd: Math.floor(pool * split2),
+    prize_group: Math.floor(pool * splitG),
+    tournament_status: getConfig('tournament_status') || 'pre'
   };
 }
 
