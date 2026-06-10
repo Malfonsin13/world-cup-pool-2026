@@ -19,6 +19,8 @@ Router.register('rules', async function(container) {
   // Cash App buy-in link. The /amount segment pre-fills the dollar amount.
   const cashtag  = CONFIG.CASHAPP_CASHTAG || '';
   const cashLink = cashtag ? `https://cash.app/$${cashtag}/${buyIn}` : '';
+  const venmo    = CONFIG.VENMO_USER || '';
+  const venmoLink = venmo ? `https://venmo.com/?txn=pay&recipients=${venmo}&amount=${buyIn}&note=WorldCupPool2026` : '';
   const zelle    = CONFIG.ZELLE_HANDLE || '';
 
   const cashCard = cashtag ? `
@@ -36,6 +38,21 @@ Router.register('rules', async function(container) {
           </div>
         </div>` : '';
 
+  const venmoCard = venmo ? `
+        <div class="pay-card pay-card-venmo">
+          <div class="pay-info">
+            <p class="pay-lead">Venmo — send <strong>$${buyIn}</strong> to <span class="venmo-handle">@${venmo}</span>.</p>
+            <a class="btn-venmo" href="${venmoLink}" target="_blank" rel="noopener noreferrer">
+              Pay $${buyIn} on Venmo →
+            </a>
+            <p class="pay-note">Tapping the button (or scanning the code) opens Venmo with the $${buyIn} amount pre-filled.</p>
+          </div>
+          <div class="pay-qr">
+            <img src="assets/venmo-qr.png?v=${window.APP_VERSION || ''}" alt="Venmo QR code for @${venmo}" width="160" height="160" loading="lazy">
+            <span class="pay-qr-label">Scan to pay</span>
+          </div>
+        </div>` : '';
+
   const zelleCard = zelle ? `
         <div class="pay-card pay-card-zelle">
           <div class="pay-info">
@@ -44,10 +61,10 @@ Router.register('rules', async function(container) {
           </div>
         </div>` : '';
 
-  const paySection = (cashtag || zelle) ? `
+  const paySection = (cashtag || venmo || zelle) ? `
       <section class="rules-section">
         <h2 class="rules-section-title">💵 Pay Your $${buyIn} Buy-In</h2>
-        <div class="pay-cards">${cashCard}${zelleCard}</div>
+        <div class="pay-cards">${cashCard}${venmoCard}${zelleCard}</div>
         <p class="pay-note" style="margin-top:.6rem;">After you send it, the admin marks you as paid — your ✓ shows up on the Leaderboard.</p>
       </section>` : '';
 

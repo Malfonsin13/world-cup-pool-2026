@@ -540,6 +540,25 @@ body {
   color: #6d1ed4;
   word-break: break-all;
 }
+.pay-card-venmo { border-left-color: #3d95ce; }   /* Venmo blue */
+.venmo-handle {
+  font-weight: 700;
+  color: #008cff;
+  white-space: nowrap;
+}
+.btn-venmo {
+  display: inline-block;
+  background: #008cff;
+  color: #fff;
+  font-weight: 800;
+  font-size: 1rem;
+  text-decoration: none;
+  padding: 0.7rem 1.4rem;
+  border-radius: 999px;
+  transition: background .15s, transform .05s;
+}
+.btn-venmo:hover { background: #0a7ce0; }
+.btn-venmo:active { transform: translateY(1px); }
 .pay-info { flex: 1; min-width: 240px; }
 .pay-lead { font-size: 0.98rem; margin-bottom: 0.85rem; }
 .cashtag {
@@ -937,7 +956,7 @@ body {
   /* ── Cash App pay card: stack info above QR, center it ── */
   .pay-card { flex-direction: column; align-items: stretch; }
   .pay-qr { align-self: center; }
-  .btn-cashapp { display: block; text-align: center; }
+  .btn-cashapp, .btn-venmo { display: block; text-align: center; }
 
   /* ── Bracket: hint that the tree pans sideways ── */
   .btree-scroll-wrap { -webkit-overflow-scrolling: touch; }

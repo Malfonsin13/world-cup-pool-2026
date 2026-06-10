@@ -16,6 +16,8 @@ window.CONFIG = {
 
   // Cash App buy-in. CASHTAG without the leading $. The /20 in the link pre-fills the amount.
   CASHAPP_CASHTAG: 'MarceloAlfonsin',
+  // Venmo username (without the @). The pay link pre-fills the amount.
+  VENMO_USER: 'Ben-Steck',
   // Zelle buy-in handle (email or US phone). No universal link/QR — players send manually.
   ZELLE_HANDLE: 'malfonsin13@gmail.com',
 
