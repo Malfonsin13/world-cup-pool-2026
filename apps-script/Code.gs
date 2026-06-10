@@ -96,10 +96,16 @@ function setConfig(key, value) {
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
+// A user's session_token cell holds a comma-separated list of tokens — one per
+// logged-in device — so logging in on a new device doesn't kick out the others.
+function parseTokens(cell) {
+  return String(cell || '').split(',').map(function(t) { return t.trim(); }).filter(function(t) { return t; });
+}
+
 function verifyToken(token) {
   if (!token) return null;
   var users = sheetToObjects('Users');
-  return users.find(function(u) { return u.session_token === token; }) || null;
+  return users.find(function(u) { return parseTokens(u.session_token).indexOf(token) !== -1; }) || null;
 }
 
 function verifyAdmin(password) {
@@ -147,7 +153,11 @@ function handleLogin(body) {
     if (data[i][emailCol] === email) {
       if (data[i][pwCol] !== hashPassword(password)) return { error: 'Invalid password' };
       var token = generateToken();
-      s.getRange(i + 1, tokenCol + 1).setValue(token);
+      // Append this device's token to the existing list (keep the most recent 10).
+      var tokens = parseTokens(data[i][tokenCol]);
+      tokens.push(token);
+      if (tokens.length > 10) tokens = tokens.slice(tokens.length - 10);
+      s.getRange(i + 1, tokenCol + 1).setValue(tokens.join(','));
       return {
         success: true,
         token: token,
