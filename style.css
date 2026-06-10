@@ -221,6 +221,23 @@ body {
 /* ── Group Stage Picks ─────────────────────────────────────────────────────── */
 .save-btn { margin-bottom: 1rem; }
 
+/* Order toggle (by group / by day) */
+.view-toggle { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.vt-label { font-size: 0.85rem; color: var(--muted); font-weight: 600; }
+.vt-group { display: inline-flex; border: 1.5px solid var(--border); border-radius: 8px; overflow: hidden; }
+.vt-btn {
+  background: var(--card);
+  border: none;
+  color: var(--muted);
+  padding: 0.45rem 1.1rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .12s, color .12s;
+}
+.vt-btn + .vt-btn { border-left: 1.5px solid var(--border); }
+.vt-btn.active { background: var(--green); color: #fff; }
+
 /* Countdowns (tournament start + next game) */
 .countdowns {
   display: flex;

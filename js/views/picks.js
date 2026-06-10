@@ -67,20 +67,19 @@ Router.register('picks', async function(container) {
       ? `<div class="banner banner-info">Each game locks at <strong>kickoff</strong> — edit any pick until that game starts. 5 pts exact score, 2 pts correct result. Times shown in your local U.S. time zone.</div>`
       : `<div class="banner banner-warning">⏰ All games have started — group picks are closed.</div>`;
 
-  let groupsHTML = '';
-  window.GROUPS.forEach(g => {
-    const games = byGroup[g] || [];
-    let rows = '';
-    games.forEach(f => {
-      const pick = existingPicks[f.id] || {};
-      const homeVal = pick.home !== undefined ? pick.home : '';
-      const awayVal = pick.away !== undefined ? pick.away : '';
-      const ptsClass = pick.pts == 5 ? 'pts-exact' : pick.pts == 2 ? 'pts-result' : pick.pts == 0 ? 'pts-wrong' : '';
-      const ptsLabel = pick.pts == 5 ? '✓ 5' : pick.pts == 2 ? '~ 2' : pick.pts == 0 ? '✗ 0' : '';
-      const kickoff = formatKickoff(f.utc);
-      const rowLocked = gameLocked(f) || globalFreeze;
+  // Order mode: 'group' (by group letter) or 'day' (by calendar date, viewer's local time)
+  const ORDER_KEY = 'wcp_picks_order';
+  let orderMode = localStorage.getItem(ORDER_KEY) === 'day' ? 'day' : 'group';
 
-      rows += `
+  function renderRow(f, values) {
+    const pick = values[f.id] || {};
+    const homeVal = pick.home !== undefined && pick.home !== null ? pick.home : '';
+    const awayVal = pick.away !== undefined && pick.away !== null ? pick.away : '';
+    const ptsClass = pick.pts == 5 ? 'pts-exact' : pick.pts == 2 ? 'pts-result' : pick.pts == 0 ? 'pts-wrong' : '';
+    const ptsLabel = pick.pts == 5 ? '✓ 5' : pick.pts == 2 ? '~ 2' : pick.pts == 0 ? '✗ 0' : '';
+    const kickoff = formatKickoff(f.utc);
+    const rowLocked = gameLocked(f) || globalFreeze;
+    return `
         <tr data-id="${f.id}" class="${rowLocked ? 'locked-row' : ''}">
           <td class="fixture-date">${rowLocked ? '🔒 ' : ''}${kickoff}</td>
           <td class="match-cell">
@@ -102,16 +101,55 @@ Router.register('picks', async function(container) {
           </td>
           <td class="pts-cell ${ptsClass}">${ptsLabel}</td>
         </tr>`;
-    });
+  }
 
-    groupsHTML += `
+  function section(title, games, values) {
+    const rows = games.map(f => renderRow(f, values)).join('');
+    return `
       <section class="group-section">
-        <h2 class="group-title">Group ${g}</h2>
-        <table class="fixtures-table">
-          <tbody>${rows}</tbody>
-        </table>
+        <h2 class="group-title">${title}</h2>
+        <table class="fixtures-table"><tbody>${rows}</tbody></table>
       </section>`;
-  });
+  }
+
+  function buildByGroup(values) {
+    return window.GROUPS.map(g => section('Group ' + g, byGroup[g] || [], values)).join('');
+  }
+
+  function buildByDay(values) {
+    const byDay = {};
+    fixtures.forEach(f => {
+      const key = new Date(f.utc).toLocaleDateString('en-CA'); // YYYY-MM-DD in local zone (sortable)
+      (byDay[key] = byDay[key] || []).push(f);
+    });
+    return Object.keys(byDay).sort().map(key => {
+      const games = byDay[key].slice().sort((a, b) => new Date(a.utc).getTime() - new Date(b.utc).getTime());
+      const label = new Date(games[0].utc).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+      return section(label, games, values);
+    }).join('');
+  }
+
+  function renderGroups(values) {
+    return orderMode === 'day' ? buildByDay(values) : buildByGroup(values);
+  }
+
+  // Snapshot current scores from the DOM (preserve unsaved edits) merged over saved picks,
+  // so toggling the order doesn't wipe what someone just typed.
+  function snapshotValues() {
+    const vals = {};
+    Object.keys(existingPicks).forEach(id => { vals[id] = Object.assign({}, existingPicks[id]); });
+    document.querySelectorAll('tr[data-id]').forEach(row => {
+      const id = row.dataset.id;
+      const h = row.querySelector('.score-home');
+      const a = row.querySelector('.score-away');
+      if (h || a) {
+        vals[id] = vals[id] || {};
+        if (h) vals[id].home = h.value;
+        if (a) vals[id].away = a.value;
+      }
+    });
+    return vals;
+  }
 
   const user = Auth.getUser();
   container.innerHTML = `
@@ -122,9 +160,16 @@ Router.register('picks', async function(container) {
       </div>
       ${countdownsHTML}
       ${lockBanner}
+      <div class="view-toggle">
+        <span class="vt-label">Order by</span>
+        <div class="vt-group" id="view-toggle">
+          <button class="vt-btn ${orderMode === 'group' ? 'active' : ''}" data-mode="group">Group</button>
+          <button class="vt-btn ${orderMode === 'day' ? 'active' : ''}" data-mode="day">Day</button>
+        </div>
+      </div>
       ${canEdit ? `<button id="save-all-btn" class="btn-primary save-btn">Save All Picks</button>` : ''}
       <div id="picks-status" class="status-msg hidden"></div>
-      <div id="groups-container">${groupsHTML}</div>
+      <div id="groups-container">${renderGroups(existingPicks)}</div>
       ${canEdit ? `<button id="save-all-btn-bottom" class="btn-primary save-btn">Save All Picks</button>` : ''}
     </div>
   `;
@@ -167,6 +212,17 @@ Router.register('picks', async function(container) {
   }
   renderCountdowns();
   window.__pickCD = setInterval(renderCountdowns, 1000);
+
+  // ── Order toggle (by group / by day) — works whether or not picks are open ─
+  document.getElementById('view-toggle').addEventListener('click', e => {
+    const btn = e.target.closest('.vt-btn');
+    if (!btn || btn.dataset.mode === orderMode) return;
+    const values = snapshotValues();   // keep unsaved edits across the re-order
+    orderMode = btn.dataset.mode;
+    localStorage.setItem(ORDER_KEY, orderMode);
+    document.querySelectorAll('#view-toggle .vt-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === orderMode));
+    document.getElementById('groups-container').innerHTML = renderGroups(values);
+  });
 
   if (!canEdit) return;
 
