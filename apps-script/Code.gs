@@ -74,6 +74,14 @@ function getTournamentStartMs() {
   return min;
 }
 
+// When the knockout bracket freezes (first bracket game kickoff), in epoch ms.
+// The whole bracket locks at once here — not per game. Admin can override via Config.
+function getBracketLockMs() {
+  var v = getConfig('bracket_lock') || '2026-06-28T16:00:00Z'; // default ~ first Round-of-32 kickoff
+  var t = new Date(v).getTime();
+  return isNaN(t) ? null : t;
+}
+
 function setConfig(key, value) {
   var s = sheet('Config');
   var data = s.getDataRange().getValues();
@@ -189,7 +197,8 @@ function handleGetConfig() {
     picks_locked: getConfig('picks_locked') === 'true',
     admin_password_set: !!(adminHash && String(adminHash).trim() !== ''),
     server_time: new Date().toISOString(),
-    tournament_start: startMs !== null ? new Date(startMs).toISOString() : null
+    tournament_start: startMs !== null ? new Date(startMs).toISOString() : null,
+    bracket_lock: (function(){ var m = getBracketLockMs(); return m !== null ? new Date(m).toISOString() : null; })()
   };
 }
 
@@ -256,6 +265,11 @@ function handleSubmitGroupPicks(userId, picks) {
 }
 
 function handleSubmitBracketPick(userId, round, matchIndex, teamPicked) {
+  // Whole bracket locks at the first knockout kickoff — no changes once playoffs begin.
+  var lockMs = getBracketLockMs();
+  if (lockMs !== null && Date.now() >= lockMs) {
+    return { error: 'Bracket is locked — the knockout stage has started' };
+  }
   if (!round || !matchIndex || !teamPicked) return { error: 'Missing fields' };
 
   var s = sheet('BracketPredictions');
@@ -355,6 +369,15 @@ function handleSetPhase(phase, adminPw) {
   return { success: true, phase: phase };
 }
 
+// Set the moment the whole bracket freezes (first knockout kickoff), as an ISO timestamp.
+function handleSetBracketLock(value, adminPw) {
+  if (!verifyAdmin(adminPw)) return { error: 'Unauthorized' };
+  var t = new Date(value).getTime();
+  if (isNaN(t)) return { error: 'Invalid date/time' };
+  setConfig('bracket_lock', new Date(t).toISOString());
+  return { success: true, bracket_lock: new Date(t).toISOString() };
+}
+
 function handleAdminGetUsers(adminPw) {
   if (!verifyAdmin(adminPw)) return { error: 'Unauthorized' };
   var users = sheetToObjects('Users').map(function(u) {
@@ -430,6 +453,7 @@ function doPost(e) {
       case 'enterMacroAnswers': return jsonOut(handleEnterMacroAnswers(body));
       case 'setPaid':           return jsonOut(handleSetPaid(body.user_id, body.paid, body.admin_password));
       case 'setPhase':          return jsonOut(handleSetPhase(body.phase, body.admin_password));
+      case 'setBracketLock':    return jsonOut(handleSetBracketLock(body.value, body.admin_password));
       case 'adminGetUsers':     return jsonOut(handleAdminGetUsers(body.admin_password));
       case 'setAdminPassword':  return jsonOut(handleSetAdminPassword(body.new_password, body.old_password));
       case 'triggerFetch':      return jsonOut(handleTriggerFetch(body.admin_password));

@@ -196,7 +196,7 @@ Router.register('rules', async function(container) {
           <div class="howto-item">
             <span class="howto-icon">🏆</span>
             <div>
-              <strong>Bracket</strong> — pick the winner of each knockout matchup <strong>before that game kicks off</strong>. The bracket opens once the Round of 32 is set.
+              <strong>Bracket</strong> — fill out your <strong>whole bracket</strong> in the window after the group stage ends. It locks all at once when the knockout stage begins (first bracket game) and can't be changed after that.
             </div>
           </div>
           <div class="howto-item">

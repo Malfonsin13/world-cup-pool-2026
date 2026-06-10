@@ -14,6 +14,11 @@ Router.register('bracket', async function(container) {
 
   const DEMO_MODE = phase === 'pre' || phase === 'group';
 
+  // The whole bracket freezes at the first knockout kickoff (server-clock driven).
+  const offset = configData.server_time ? (Date.now() - new Date(configData.server_time).getTime()) : 0;
+  const lockMs = configData.bracket_lock ? new Date(configData.bracket_lock).getTime() : null;
+  const bracketLocked = lockMs !== null && (Date.now() - offset) >= lockMs;
+
   // Real knockout fixtures indexed by round + match_index
   const kFixtures = (fixturesData.fixtures || []).filter(f => f.phase === 'knockout');
   const byRound = {};
@@ -52,7 +57,7 @@ Router.register('bracket', async function(container) {
       }
       const won      = winner === team;
       const myPicked = pick && pick.team_picked === team;
-      const locked   = done || isDemoLocked;
+      const locked   = done || isDemoLocked || bracketLocked;
       return `
         <button class="bs ${won ? 'bs-win' : ''} ${myPicked ? 'bs-pick' : ''} ${locked ? 'bs-lock' : ''}"
                 data-team="${team}" data-round="${round}" data-idx="${matchIndex}"
@@ -134,11 +139,13 @@ Router.register('bracket', async function(container) {
       </div>
     </div>`;
 
-  const demoBanner = DEMO_MODE
+  const statusBanner = DEMO_MODE
     ? `<div class="banner banner-info">
-        Bracket picks open June 28 after group stage ends. Below is a preview with example teams — your actual picks open round-by-round starting June 28.
+        The bracket opens once the group stage ends and the Round of 32 is set. Below is a preview with example teams. You'll fill out your <strong>whole bracket</strong> in one go — it locks when the knockout stage begins.
        </div>`
-    : '';
+    : bracketLocked
+      ? `<div class="banner banner-warning">🔒 Bracket locked — the knockout stage has begun. Your picks are final.</div>`
+      : `<div class="banner banner-info">Fill out your <strong>entire bracket</strong> now — pick a winner for every matchup. It locks the moment the first knockout game kicks off, so get them all in before then.</div>`;
 
   const user = Auth.getUser();
   container.innerHTML = `
@@ -147,13 +154,13 @@ Router.register('bracket', async function(container) {
         <h1>Knockout Bracket</h1>
         <span class="user-badge">${user.display_name}</span>
       </div>
-      ${demoBanner}
+      ${statusBanner}
       <div id="bracket-status" class="status-msg hidden"></div>
       <div class="btree-scroll-wrap">${bracketTree}</div>
       ${DEMO_MODE ? '<p class="btree-demo-note">Demo layout — teams TBD after group stage</p>' : ''}
     </div>`;
 
-  if (DEMO_MODE) return;
+  if (DEMO_MODE || bracketLocked) return;
 
   // ── Live pick binding ─────────────────────────────────────────────────────
   container.querySelectorAll('.bs:not([disabled])').forEach(btn => {

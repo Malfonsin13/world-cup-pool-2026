@@ -122,6 +122,16 @@ Router.register('admin', async function(container) {
       (window.ALL_TEAMS || []).map(t => `<option value="${t}">${t}</option>`).join('');
     const roundOpts = CONFIG.ROUNDS.map(r => `<option value="${r}">${r}</option>`).join('');
 
+    // Bracket lock time: prefill the datetime-local in local time + show a friendly label
+    const blIso = configData.bracket_lock || '';
+    const pad = n => String(n).padStart(2, '0');
+    const bracketLockLocal = blIso
+      ? (() => { const d = new Date(blIso); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`; })()
+      : '';
+    const bracketLockDisplay = blIso
+      ? new Date(blIso).toLocaleString('en-US', { weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit', timeZoneName:'short' })
+      : 'not set';
+
     container.innerHTML = `
       <div class="page-admin">
         <div class="page-header">
@@ -240,10 +250,20 @@ Router.register('admin', async function(container) {
         <!-- Tournament phase -->
         <div class="admin-card">
           <h2>Tournament Phase</h2>
-          <p>Current: <strong>${phase}</strong>. Switching to "group" locks all pre-tournament picks.</p>
+          <p>Current: <strong>${phase}</strong>. Set to "knockout" once the Round of 32 is built so players can fill their brackets. (Group/macro locking is automatic by kickoff time — phase no longer freezes picks.)</p>
           <select id="phase-select">${phaseOptions}</select>
           <button id="phase-btn" class="btn-secondary">Update Phase</button>
           <p id="phase-status" class="status-msg hidden"></p>
+        </div>
+
+        <!-- Bracket lock time -->
+        <div class="admin-card">
+          <h2>Bracket Lock Time</h2>
+          <p>The whole bracket freezes at this moment — set it to the <strong>first knockout game's kickoff</strong>. Enter it in your local time.</p>
+          <input type="datetime-local" id="bracket-lock-input" value="${bracketLockLocal}">
+          <button id="bracket-lock-btn" class="btn-secondary">Save Bracket Lock</button>
+          <p class="admin-hint">Currently locks at: ${bracketLockDisplay}</p>
+          <p id="bracket-lock-status" class="status-msg hidden"></p>
         </div>
 
         <!-- Payment management -->
@@ -399,6 +419,25 @@ Router.register('admin', async function(container) {
       btn.disabled = true;
       const res = await API.post({ action: 'setPhase', phase, admin_password: adminPw });
       st.textContent = res.error ? 'Error: ' + res.error : `✓ Phase set to "${phase}"`;
+      st.className = 'status-msg ' + (res.error ? 'error' : 'success');
+      btn.disabled = false;
+    });
+
+    // Bracket lock time
+    document.getElementById('bracket-lock-btn').addEventListener('click', async () => {
+      const btn = document.getElementById('bracket-lock-btn');
+      const st  = document.getElementById('bracket-lock-status');
+      const val = document.getElementById('bracket-lock-input').value; // local datetime
+      if (!val) {
+        st.textContent = 'Pick a date and time first.';
+        st.className = 'status-msg error';
+        return;
+      }
+      btn.disabled = true;
+      // Convert the admin's local datetime to an ISO (UTC) instant
+      const iso = new Date(val).toISOString();
+      const res = await API.post({ action: 'setBracketLock', value: iso, admin_password: adminPw });
+      st.textContent = res.error ? 'Error: ' + res.error : '✓ Bracket lock time saved.';
       st.className = 'status-msg ' + (res.error ? 'error' : 'success');
       btn.disabled = false;
     });

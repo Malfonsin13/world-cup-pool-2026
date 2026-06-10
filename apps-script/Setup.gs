@@ -55,6 +55,7 @@ function populateConfig() {
     ['prize_split_group', '0.15'],
     ['tournament_status', 'pre'],
     ['picks_locked', 'false'],
+    ['bracket_lock', '2026-06-28T16:00:00Z'],
     ['admin_password_hash', '']
   ];
 
