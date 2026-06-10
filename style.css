@@ -221,6 +221,29 @@ body {
 /* ── Group Stage Picks ─────────────────────────────────────────────────────── */
 .save-btn { margin-bottom: 1rem; }
 
+/* Countdowns (tournament start + next game) */
+.countdowns {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+.cd-card {
+  flex: 1;
+  min-width: 220px;
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 0.9rem 1.1rem;
+  border-left: 5px solid var(--green);
+}
+.cd-card.cd-tournament { border-left-color: var(--gold); }
+.cd-label { font-size: 0.78rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 0.3rem; }
+.cd-time { font-size: 1.6rem; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--text); line-height: 1.1; }
+.cd-time.cd-done { font-size: 1rem; color: var(--muted); font-weight: 600; }
+.cd-next-teams { font-size: 0.95rem; font-weight: 700; display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.35rem; flex-wrap: wrap; }
+.cd-vs { color: var(--muted); font-weight: 400; font-size: 0.8rem; }
+
 .group-section { margin-bottom: 2rem; }
 .group-title {
   font-size: 1rem;

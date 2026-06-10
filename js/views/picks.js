@@ -23,6 +23,37 @@ Router.register('picks', async function(container) {
   const globalFreeze = !!configData.picks_locked;          // optional admin "freeze everything"
   const canEdit = anyOpen && !globalFreeze;
 
+  const startMs = configData.tournament_start ? new Date(configData.tournament_start).getTime() : null;
+  const beforeStart = startMs !== null && nowMs() < startMs;
+
+  function fmtCountdown(ms) {
+    if (ms <= 0) return '0s';
+    let s = Math.floor(ms / 1000);
+    const d = Math.floor(s / 86400); s -= d * 86400;
+    const h = Math.floor(s / 3600);  s -= h * 3600;
+    const m = Math.floor(s / 60);    s -= m * 60;
+    const parts = [];
+    if (d) parts.push(d + 'd');
+    if (d || h) parts.push(h + 'h');
+    parts.push(m + 'm');
+    parts.push(s + 's');
+    return parts.join(' ');
+  }
+
+  const countdownsHTML = `
+    <div class="countdowns" id="countdown-wrap">
+      ${beforeStart ? `
+      <div class="cd-card cd-tournament" id="cd-tournament">
+        <div class="cd-label">⏱️ Tournament starts in</div>
+        <div class="cd-time" id="cd-tournament-val">—</div>
+      </div>` : ''}
+      <div class="cd-card cd-next" id="cd-next">
+        <div class="cd-label">⚽ Next game</div>
+        <div class="cd-next-teams" id="cd-next-teams"></div>
+        <div class="cd-time" id="cd-next-val">—</div>
+      </div>
+    </div>`;
+
   // Group by group letter
   const byGroup = {};
   fixtures.forEach(f => {
@@ -89,6 +120,7 @@ Router.register('picks', async function(container) {
         <h1>Group Stage Picks</h1>
         <span class="user-badge">${user.display_name}</span>
       </div>
+      ${countdownsHTML}
       ${lockBanner}
       ${canEdit ? `<button id="save-all-btn" class="btn-primary save-btn">Save All Picks</button>` : ''}
       <div id="picks-status" class="status-msg hidden"></div>
@@ -96,6 +128,45 @@ Router.register('picks', async function(container) {
       ${canEdit ? `<button id="save-all-btn-bottom" class="btn-primary save-btn">Save All Picks</button>` : ''}
     </div>
   `;
+
+  // ── Live countdowns (tournament start + next game) ─────────────────────────
+  if (window.__pickCD) { clearInterval(window.__pickCD); window.__pickCD = null; }
+  let lastNextId = null;
+  function renderCountdowns() {
+    const wrap = document.getElementById('countdown-wrap');
+    if (!wrap) { clearInterval(window.__pickCD); window.__pickCD = null; return; } // navigated away
+    const now = Date.now() - offset;
+
+    const tEl = document.getElementById('cd-tournament-val');
+    if (tEl && startMs !== null) {
+      const left = startMs - now;
+      if (left > 0) tEl.textContent = fmtCountdown(left);
+      else { const c = document.getElementById('cd-tournament'); if (c) c.remove(); }
+    }
+
+    const nextCard = document.getElementById('cd-next');
+    if (!nextCard) return;
+    const upcoming = fixtures
+      .filter(f => new Date(f.utc).getTime() > now)
+      .sort((a, b) => new Date(a.utc).getTime() - new Date(b.utc).getTime());
+    if (!upcoming.length) {
+      if (lastNextId !== 'none') {
+        nextCard.innerHTML = `<div class="cd-label">⚽ Next game</div><div class="cd-time cd-done">All group games have kicked off</div>`;
+        lastNextId = 'none';
+      }
+      return;
+    }
+    const ng = upcoming[0];
+    if (ng.id !== lastNextId) {   // only rebuild teams when the next game changes
+      const teamsEl = document.getElementById('cd-next-teams');
+      if (teamsEl) teamsEl.innerHTML = `${teamWithFlag(ng.home, 'left')} <span class="cd-vs">vs</span> ${teamWithFlag(ng.away, 'right')}`;
+      lastNextId = ng.id;
+    }
+    const valEl = document.getElementById('cd-next-val');
+    if (valEl) valEl.textContent = fmtCountdown(new Date(ng.utc).getTime() - now);
+  }
+  renderCountdowns();
+  window.__pickCD = setInterval(renderCountdowns, 1000);
 
   if (!canEdit) return;
 
