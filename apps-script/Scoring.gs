@@ -38,8 +38,12 @@ function autoFetchResults() {
       Logger.log('Auto-fetch failed: HTTP ' + response.getResponseCode());
       return;
     }
-    var games = JSON.parse(response.getContentText());
-    if (!Array.isArray(games)) {
+    var parsed = JSON.parse(response.getContentText());
+    // The API wraps the list in { "games": [...] }; older/bare-array forms are also accepted.
+    var games = Array.isArray(parsed) ? parsed
+              : (parsed && Array.isArray(parsed.games)) ? parsed.games
+              : null;
+    if (!games) {
       Logger.log('Auto-fetch: unexpected response format');
       return;
     }
