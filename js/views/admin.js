@@ -305,6 +305,7 @@ Router.register('admin', async function(container) {
       btn.disabled = true;
       btn.textContent = 'Fetching…';
       const res = await API.post({ action: 'triggerFetch', admin_password: adminPw });
+      if (!res.error) { API.invalidate('getFixtures'); API.invalidate('getLeaderboard'); API.invalidate('getUserPicks'); }
       st.textContent = res.error ? 'Error: ' + res.error : '✓ Fetch triggered — leaderboard will update shortly.';
       st.className = 'status-msg ' + (res.error ? 'error' : 'success');
       btn.disabled = false;
@@ -327,6 +328,7 @@ Router.register('admin', async function(container) {
           away_score: parseInt(document.getElementById('override-away').value),
           admin_password: adminPw
         });
+        if (!res.error) { API.invalidate('getFixtures'); API.invalidate('getLeaderboard'); API.invalidate('getUserPicks'); }
         st.textContent = res.error ? 'Error: ' + res.error : '✓ Result saved and scores updated.';
         st.className = 'status-msg ' + (res.error ? 'error' : 'success');
         btn.disabled = false;
@@ -373,6 +375,7 @@ Router.register('admin', async function(container) {
         away_score: hasScore ? parseInt(as) : '',
         admin_password: adminPw
       });
+      if (!res.error) { API.invalidate('getFixtures'); API.invalidate('getLeaderboard'); API.invalidate('getUserPicks'); }
       st.textContent = res.error ? 'Error: ' + res.error
         : (hasScore ? '✓ Result saved — bracket picks scored.' : '✓ Matchup set.');
       st.className = 'status-msg ' + (res.error ? 'error' : 'success');
@@ -405,6 +408,7 @@ Router.register('admin', async function(container) {
       btn.disabled = true;
       btn.textContent = 'Scoring…';
       const res = await API.post({ action: 'enterMacroAnswers', answers, admin_password: adminPw });
+      if (!res.error) { API.invalidate('getLeaderboard'); API.invalidate('getUserPicks'); }
       st.textContent = res.error ? 'Error: ' + res.error : '✓ Macro picks scored — leaderboard updated.';
       st.className = 'status-msg ' + (res.error ? 'error' : 'success');
       btn.disabled = false;
@@ -418,6 +422,7 @@ Router.register('admin', async function(container) {
       const phase = document.getElementById('phase-select').value;
       btn.disabled = true;
       const res = await API.post({ action: 'setPhase', phase, admin_password: adminPw });
+      if (!res.error) API.invalidate('getConfig');
       st.textContent = res.error ? 'Error: ' + res.error : `✓ Phase set to "${phase}"`;
       st.className = 'status-msg ' + (res.error ? 'error' : 'success');
       btn.disabled = false;
@@ -437,6 +442,7 @@ Router.register('admin', async function(container) {
       // Convert the admin's local datetime to an ISO (UTC) instant
       const iso = new Date(val).toISOString();
       const res = await API.post({ action: 'setBracketLock', value: iso, admin_password: adminPw });
+      if (!res.error) API.invalidate('getConfig');
       st.textContent = res.error ? 'Error: ' + res.error : '✓ Bracket lock time saved.';
       st.className = 'status-msg ' + (res.error ? 'error' : 'success');
       btn.disabled = false;

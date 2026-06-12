@@ -16,7 +16,7 @@ Router.register('picks', async function(container) {
   const fixtures = window.FIXTURES;
 
   // Per-game locking driven by the server clock (so a wrong local clock can't cheat the display).
-  const offset = configData.server_time ? (Date.now() - new Date(configData.server_time).getTime()) : 0;
+  const offset = window.__clockOffset || 0;   // measured once from getConfig (see api.js)
   const nowMs = () => Date.now() - offset;                 // server-aligned "now"
   const gameLocked = f => new Date(f.utc).getTime() <= nowMs();
   const anyOpen = fixtures.some(f => !gameLocked(f));
@@ -257,6 +257,7 @@ Router.register('picks', async function(container) {
     try {
       const res = await API.postAuth({ action: 'submitGroupPicks', picks });
       if (res.error) throw new Error(res.error);
+      API.invalidate('getUserPicks');   // picks changed — refetch next time
       let msg = `✓ ${res.saved} pick${res.saved === 1 ? '' : 's'} saved!`;
       const rej = (res.rejected || []).length;
       if (rej) msg += ` ${rej} game${rej === 1 ? '' : 's'} had already started and ${rej === 1 ? 'was' : 'were'} not saved.`;

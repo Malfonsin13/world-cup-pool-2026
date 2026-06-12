@@ -15,7 +15,7 @@ Router.register('bracket', async function(container) {
   const DEMO_MODE = phase === 'pre' || phase === 'group';
 
   // The whole bracket freezes at the first knockout kickoff (server-clock driven).
-  const offset = configData.server_time ? (Date.now() - new Date(configData.server_time).getTime()) : 0;
+  const offset = window.__clockOffset || 0;   // measured once from getConfig (see api.js)
   const lockMs = configData.bracket_lock ? new Date(configData.bracket_lock).getTime() : null;
   const bracketLocked = lockMs !== null && (Date.now() - offset) >= lockMs;
 
@@ -183,6 +183,7 @@ Router.register('bracket', async function(container) {
           team_picked: team
         });
         if (res.error) throw new Error(res.error);
+        API.invalidate('getUserPicks');   // bracket pick changed — refetch next time
         statusEl.className = 'status-msg hidden';
       } catch (err) {
         btn.classList.remove('bs-pick');

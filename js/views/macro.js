@@ -9,7 +9,7 @@ Router.register('macro', async function(container) {
 
   const existing = picksData.macro_picks || {};
   // Macro picks lock for everyone at the first game's kickoff (server-clock driven).
-  const offset  = configData.server_time ? (Date.now() - new Date(configData.server_time).getTime()) : 0;
+  const offset  = window.__clockOffset || 0;   // measured once from getConfig (see api.js)
   const startMs = configData.tournament_start ? new Date(configData.tournament_start).getTime() : null;
   const locked  = configData.picks_locked || (startMs !== null && (Date.now() - offset) >= startMs);
   const teams    = window.ALL_TEAMS;
@@ -114,6 +114,7 @@ Router.register('macro', async function(container) {
     try {
       const res = await API.postAuth({ action: 'submitMacroPicks', picks });
       if (res.error) throw new Error(res.error);
+      API.invalidate('getUserPicks');   // macro picks changed — refetch next time
       statusEl.textContent = '✓ Macro picks saved!';
       statusEl.className = 'status-msg success';
     } catch (err) {
