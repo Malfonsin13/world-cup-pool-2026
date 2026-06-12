@@ -186,6 +186,12 @@ function unfinalizeFixture(fixtureId) {
   Logger.log('Unfinalized fixture ' + fixtureId + ' and rebuilt leaderboard.');
 }
 
+// One-click cleanup for the phantom USA–Paraguay (fixture 19): select this in the
+// editor's function dropdown and press Run. Safe to delete after you've run it once.
+function clearPhantomGame19() {
+  unfinalizeFixture(19);
+}
+
 // ── Knockout fixture upsert ───────────────────────────────────────────────────
 // Creates or updates a knockout matchup by round + match_index, optionally with
 // a result. If scores are provided, marks final and scores bracket picks.
