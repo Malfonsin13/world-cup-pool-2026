@@ -63,6 +63,17 @@ function autoFetchResults() {
       if (!fixtureRow) return;
       if (fixtureRow.status === 'final') return; // already scored
 
+      // Defensive: never accept a result for a game whose scheduled kickoff hasn't arrived yet.
+      // Guards against the source API briefly/incorrectly flagging a future game as "finished"
+      // (it defaults not-started games to 0-0), which otherwise records a phantom result.
+      if (fixtureRow.utc_date) {
+        var ko = new Date(fixtureRow.utc_date).getTime();
+        if (!isNaN(ko) && ko > Date.now()) {
+          Logger.log('Skip (kickoff in future): ' + apiHome + ' v ' + apiAway);
+          return;
+        }
+      }
+
       var homeScore = parseInt(game.home_score, 10);
       var awayScore = parseInt(game.away_score, 10);
       if (isNaN(homeScore) || isNaN(awayScore)) return;
@@ -119,6 +130,60 @@ function updateFixtureResult(fixtureId, homeScore, awayScore) {
 
   rebuildLeaderboard();
   return { success: true };
+}
+
+// ── One-off correction ────────────────────────────────────────────────────────
+// Revert a fixture that was wrongly marked final (e.g. a phantom result recorded
+// before the game was played). Clears its score/status and the points it awarded on
+// every prediction, then rebuilds the leaderboard. Run manually from the editor, e.g.
+// unfinalizeFixture(19).
+function unfinalizeFixture(fixtureId) {
+  var s = sheet('Fixtures');
+  var data = s.getDataRange().getValues();
+  var headers = data[0];
+  var idCol = headers.indexOf('id');
+
+  var row = -1, phase = 'group';
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][idCol]) === String(fixtureId)) {
+      row = i + 1;
+      phase = data[i][headers.indexOf('phase')];
+      break;
+    }
+  }
+  if (row < 0) { Logger.log('Fixture ' + fixtureId + ' not found'); return; }
+
+  s.getRange(row, headers.indexOf('home_score') + 1).setValue('');
+  s.getRange(row, headers.indexOf('away_score') + 1).setValue('');
+  s.getRange(row, headers.indexOf('status') + 1).setValue('pending');
+
+  if (phase === 'knockout') {
+    var bp = sheet('BracketPredictions');
+    var bdata = bp.getDataRange().getValues();
+    var bh = bdata[0];
+    var bIdx = bh.indexOf('match_index'), bRound = bh.indexOf('round');
+    var bCor = bh.indexOf('is_correct'), bPts = bh.indexOf('pts_awarded');
+    // Knockout predictions key off round+match_index; clear all of this fixture's round/match.
+    var fRound = data[row - 1][headers.indexOf('round')];
+    var fMatch = data[row - 1][headers.indexOf('match_index')];
+    for (var k = 1; k < bdata.length; k++) {
+      if (bdata[k][bRound] === fRound && String(bdata[k][bIdx]) === String(fMatch)) {
+        bp.getRange(k + 1, bCor + 1).setValue('');
+        bp.getRange(k + 1, bPts + 1).setValue(0);
+      }
+    }
+  } else {
+    var gp = sheet('GroupPredictions');
+    var gdata = gp.getDataRange().getValues();
+    var gh = gdata[0];
+    var fcol = gh.indexOf('fixture_id'), pcol = gh.indexOf('pts_awarded');
+    for (var j = 1; j < gdata.length; j++) {
+      if (String(gdata[j][fcol]) === String(fixtureId)) gp.getRange(j + 1, pcol + 1).setValue('');
+    }
+  }
+
+  rebuildLeaderboard();
+  Logger.log('Unfinalized fixture ' + fixtureId + ' and rebuilt leaderboard.');
 }
 
 // ── Knockout fixture upsert ───────────────────────────────────────────────────
