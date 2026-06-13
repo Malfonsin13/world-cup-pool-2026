@@ -6,7 +6,7 @@ var BRACKET_PTS = { R32: 3, R16: 5, QF: 8, SF: 12, Final: 18 };
 var CHAMPION_BONUS = 25;
 var MACRO_PTS = { runner_up: 15, third_place: 10, golden_ball: 10, golden_boot: 10, golden_glove: 10 };
 
-// Normalize team names so our fixtures match the worldcup26.ir API names.
+// Normalize team names so our fixtures match the results-feed names.
 // Maps a lowercased, trimmed name to our canonical fixture name.
 var TEAM_NAME_ALIASES = {
   'united states': 'USA', 'usa': 'USA', 'us': 'USA',
@@ -26,46 +26,47 @@ function canonTeam(name) {
   return TEAM_NAME_ALIASES[key] || String(name).trim();
 }
 
-// ── Auto-fetch results from worldcup26.ir ─────────────────────────────────────
+// ── Auto-fetch results from ESPN ──────────────────────────────────────────────
+// ESPN's public scoreboard for the FIFA World Cup. No API key needed. One call with
+// a full-tournament date range returns every match; we only act on games ESPN marks
+// completed (status.type.completed === true / state === 'post'). Matched to our
+// fixtures by team name, with a kickoff-time guard as a second safety net.
+
+var ESPN_WC_URL = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260611-20260719';
 
 function autoFetchResults() {
   try {
-    var response = UrlFetchApp.fetch('https://worldcup26.ir/get/games', {
-      muteHttpExceptions: true,
-      headers: { 'Accept': 'application/json' }
-    });
+    var response = UrlFetchApp.fetch(ESPN_WC_URL, { muteHttpExceptions: true });
     if (response.getResponseCode() !== 200) {
       Logger.log('Auto-fetch failed: HTTP ' + response.getResponseCode());
       return;
     }
-    var parsed = JSON.parse(response.getContentText());
-    // The API wraps the list in { "games": [...] }; older/bare-array forms are also accepted.
-    var games = Array.isArray(parsed) ? parsed
-              : (parsed && Array.isArray(parsed.games)) ? parsed.games
-              : null;
-    if (!games) {
-      Logger.log('Auto-fetch: unexpected response format');
+    var data = JSON.parse(response.getContentText());
+    var events = data && data.events;
+    if (!Array.isArray(events)) {
+      Logger.log('Auto-fetch: unexpected ESPN response format');
       return;
     }
 
     var updated = false;
-    games.forEach(function(game) {
-      // API returns finished as the STRING "TRUE"/"FALSE"
-      var finishedRaw = game.finished;
-      var finished = finishedRaw === true || finishedRaw === 'TRUE' || finishedRaw === 'true' ||
-                     game.status === 'finished' || game.status === 'FT';
-      if (!finished) return;
+    events.forEach(function(ev) {
+      var type = ev.status && ev.status.type;
+      var completed = type && (type.completed === true || type.state === 'post');
+      if (!completed) return; // only score truly finished games
 
-      // Match by team names (robust — api_id scheme is not guaranteed)
-      var apiHome = canonTeam(game.home_team_name_en || game.home_team || game.home);
-      var apiAway = canonTeam(game.away_team_name_en || game.away_team || game.away);
+      var comp = ev.competitions && ev.competitions[0];
+      if (!comp || !comp.competitors) return;
+      var home = comp.competitors.find(function(c) { return c.homeAway === 'home'; });
+      var away = comp.competitors.find(function(c) { return c.homeAway === 'away'; });
+      if (!home || !away || !home.team || !away.team) return;
+
+      var apiHome = canonTeam(home.team.displayName || home.team.name || home.team.shortDisplayName);
+      var apiAway = canonTeam(away.team.displayName || away.team.name || away.team.shortDisplayName);
       var fixtureRow = findFixtureByTeams(apiHome, apiAway);
       if (!fixtureRow) return;
       if (fixtureRow.status === 'final') return; // already scored
 
       // Defensive: never accept a result for a game whose scheduled kickoff hasn't arrived yet.
-      // Guards against the source API briefly/incorrectly flagging a future game as "finished"
-      // (it defaults not-started games to 0-0), which otherwise records a phantom result.
       if (fixtureRow.utc_date) {
         var ko = new Date(fixtureRow.utc_date).getTime();
         if (!isNaN(ko) && ko > Date.now()) {
@@ -74,8 +75,8 @@ function autoFetchResults() {
         }
       }
 
-      var homeScore = parseInt(game.home_score, 10);
-      var awayScore = parseInt(game.away_score, 10);
+      var homeScore = parseInt(home.score, 10);
+      var awayScore = parseInt(away.score, 10);
       if (isNaN(homeScore) || isNaN(awayScore)) return;
 
       updateFixtureResult(fixtureRow.id, homeScore, awayScore);
