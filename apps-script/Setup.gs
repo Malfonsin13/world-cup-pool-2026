@@ -94,7 +94,7 @@ function populateFixtures() {
     [17,'',  'group','C',3,'Scotland','Brazil','2026-06-24T22:00:00Z','','','pending'],
     [18,'',  'group','C',3,'Morocco','Haiti','2026-06-24T22:00:00Z','','','pending'],
     [19,'',  'group','D',1,'USA','Paraguay','2026-06-13T01:00:00Z','','','pending'],
-    [20,'',  'group','D',1,'Australia','Türkiye','2026-06-13T04:00:00Z','','','pending'],
+    [20,'',  'group','D',1,'Australia','Türkiye','2026-06-14T04:00:00Z','','','pending'],
     [21,'',  'group','D',2,'USA','Australia','2026-06-19T19:00:00Z','','','pending'],
     [22,'',  'group','D',2,'Türkiye','Paraguay','2026-06-20T03:00:00Z','','','pending'],
     [23,'',  'group','D',3,'Türkiye','USA','2026-06-26T02:00:00Z','','','pending'],
@@ -107,7 +107,7 @@ function populateFixtures() {
     [30,'',  'group','E',3,'Ecuador','Germany','2026-06-25T20:00:00Z','','','pending'],
     [31,'',  'group','F',1,'Netherlands','Japan','2026-06-14T20:00:00Z','','','pending'],
     [32,'',  'group','F',1,'Sweden','Tunisia','2026-06-15T02:00:00Z','','','pending'],
-    [33,'',  'group','F',2,'Tunisia','Japan','2026-06-20T04:00:00Z','','','pending'],
+    [33,'',  'group','F',2,'Tunisia','Japan','2026-06-21T04:00:00Z','','','pending'],
     [34,'',  'group','F',2,'Netherlands','Sweden','2026-06-20T17:00:00Z','','','pending'],
     [35,'',  'group','F',3,'Japan','Sweden','2026-06-25T23:00:00Z','','','pending'],
     [36,'',  'group','F',3,'Tunisia','Netherlands','2026-06-25T23:00:00Z','','','pending'],
@@ -129,7 +129,7 @@ function populateFixtures() {
     [52,'',  'group','I',2,'Norway','Senegal','2026-06-23T00:00:00Z','','','pending'],
     [53,'',  'group','I',3,'Norway','France','2026-06-26T19:00:00Z','','','pending'],
     [54,'',  'group','I',3,'Senegal','Iraq','2026-06-26T19:00:00Z','','','pending'],
-    [55,'',  'group','J',1,'Austria','Jordan','2026-06-16T04:00:00Z','','','pending'],
+    [55,'',  'group','J',1,'Austria','Jordan','2026-06-17T04:00:00Z','','','pending'],
     [56,'',  'group','J',1,'Argentina','Algeria','2026-06-17T01:00:00Z','','','pending'],
     [57,'',  'group','J',2,'Argentina','Austria','2026-06-22T17:00:00Z','','','pending'],
     [58,'',  'group','J',2,'Jordan','Algeria','2026-06-23T03:00:00Z','','','pending'],
@@ -188,4 +188,27 @@ function migrateV2() {
   Logger.log('MacroPicks rebuilt with new schema');
 
   Logger.log('Migration V2 complete.');
+}
+
+// ── One-off: correct kickoff times on an existing sheet ────────────────────────
+// Three 04:00 UTC games were placed one calendar day too early (so they locked
+// prematurely). Run this ONCE from the editor to fix them in the live Fixtures sheet.
+// Verified against ESPN's official schedule.
+function fixKickoffTimes() {
+  var corrections = {
+    '20': '2026-06-14T04:00:00Z',  // Australia v Türkiye
+    '33': '2026-06-21T04:00:00Z',  // Tunisia v Japan
+    '55': '2026-06-17T04:00:00Z'   // Austria v Jordan
+  };
+  var s = SS.getSheetByName('Fixtures');
+  var data = s.getDataRange().getValues();
+  var headers = data[0];
+  var idCol = headers.indexOf('id');
+  var utcCol = headers.indexOf('utc_date');
+  var fixed = 0;
+  for (var i = 1; i < data.length; i++) {
+    var corr = corrections[String(data[i][idCol])];
+    if (corr) { s.getRange(i + 1, utcCol + 1).setValue(corr); fixed++; }
+  }
+  Logger.log('Corrected ' + fixed + ' kickoff times.');
 }

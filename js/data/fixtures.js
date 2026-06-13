@@ -27,7 +27,7 @@ window.FIXTURES = [
 
   // ── GROUP D ──────────────────────────────────────────────
   { id: 19, group: 'D', round: 1, home: 'USA',       away: 'Paraguay', utc: '2026-06-13T01:00:00Z' },
-  { id: 20, group: 'D', round: 1, home: 'Australia', away: 'Türkiye',  utc: '2026-06-13T04:00:00Z' },
+  { id: 20, group: 'D', round: 1, home: 'Australia', away: 'Türkiye',  utc: '2026-06-14T04:00:00Z' },
   { id: 21, group: 'D', round: 2, home: 'USA',       away: 'Australia',utc: '2026-06-19T19:00:00Z' },
   { id: 22, group: 'D', round: 2, home: 'Türkiye',   away: 'Paraguay', utc: '2026-06-20T03:00:00Z' },
   { id: 23, group: 'D', round: 3, home: 'Türkiye',   away: 'USA',      utc: '2026-06-26T02:00:00Z' },
@@ -44,7 +44,7 @@ window.FIXTURES = [
   // ── GROUP F ──────────────────────────────────────────────
   { id: 31, group: 'F', round: 1, home: 'Netherlands', away: 'Japan',       utc: '2026-06-14T20:00:00Z' },
   { id: 32, group: 'F', round: 1, home: 'Sweden',      away: 'Tunisia',     utc: '2026-06-15T02:00:00Z' },
-  { id: 33, group: 'F', round: 2, home: 'Tunisia',     away: 'Japan',       utc: '2026-06-20T04:00:00Z' },
+  { id: 33, group: 'F', round: 2, home: 'Tunisia',     away: 'Japan',       utc: '2026-06-21T04:00:00Z' },
   { id: 34, group: 'F', round: 2, home: 'Netherlands', away: 'Sweden',      utc: '2026-06-20T17:00:00Z' },
   { id: 35, group: 'F', round: 3, home: 'Japan',       away: 'Sweden',      utc: '2026-06-25T23:00:00Z' },
   { id: 36, group: 'F', round: 3, home: 'Tunisia',     away: 'Netherlands', utc: '2026-06-25T23:00:00Z' },
@@ -74,7 +74,7 @@ window.FIXTURES = [
   { id: 54, group: 'I', round: 3, home: 'Senegal', away: 'Iraq',    utc: '2026-06-26T19:00:00Z' },
 
   // ── GROUP J ──────────────────────────────────────────────
-  { id: 55, group: 'J', round: 1, home: 'Austria',   away: 'Jordan',   utc: '2026-06-16T04:00:00Z' },
+  { id: 55, group: 'J', round: 1, home: 'Austria',   away: 'Jordan',   utc: '2026-06-17T04:00:00Z' },
   { id: 56, group: 'J', round: 1, home: 'Argentina', away: 'Algeria',  utc: '2026-06-17T01:00:00Z' },
   { id: 57, group: 'J', round: 2, home: 'Argentina', away: 'Austria',  utc: '2026-06-22T17:00:00Z' },
   { id: 58, group: 'J', round: 2, home: 'Jordan',    away: 'Algeria',  utc: '2026-06-23T03:00:00Z' },
