@@ -258,13 +258,21 @@ Router.register('picks', async function(container) {
       const res = await API.postAuth({ action: 'submitGroupPicks', picks });
       if (res.error) throw new Error(res.error);
       API.invalidate('getUserPicks');   // picks changed — refetch next time
-      let msg = `✓ ${res.saved} pick${res.saved === 1 ? '' : 's'} saved!`;
-      const rej = (res.rejected || []).length;
-      if (rej) msg += ` ${rej} game${rej === 1 ? '' : 's'} had already started and ${rej === 1 ? 'was' : 'were'} not saved.`;
-      statusEl.textContent = msg;
-      statusEl.className = 'status-msg ' + (rej ? 'warning' : 'success');
-      // Re-render so any games that locked since page load now show as closed.
-      if (rej) setTimeout(() => Router.render('#/picks'), 1800);
+      const rejected = res.rejected || [];
+      if (rejected.length) {
+        // Name the games that didn't save so it can't be missed.
+        const names = rejected.map(id => {
+          const f = fixtures.find(x => String(x.id) === String(id));
+          return f ? `${f.home} vs ${f.away}` : `game #${id}`;
+        }).join(', ');
+        statusEl.innerHTML = `⚠️ <strong>${rejected.length} pick${rejected.length === 1 ? '' : 's'} did NOT save</strong> — ` +
+          `${rejected.length === 1 ? 'this game has' : 'these games have'} already kicked off: ${names}. ` +
+          `${res.saved} other${res.saved === 1 ? '' : 's'} saved.`;
+        statusEl.className = 'status-msg warning';   // persists; not auto-cleared so it can't be missed
+      } else {
+        statusEl.textContent = `✓ ${res.saved} pick${res.saved === 1 ? '' : 's'} saved!`;
+        statusEl.className = 'status-msg success';
+      }
     } catch (err) {
       statusEl.textContent = 'Error saving: ' + err.message;
       statusEl.className = 'status-msg error';

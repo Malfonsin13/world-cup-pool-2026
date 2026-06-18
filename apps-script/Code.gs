@@ -184,19 +184,48 @@ function handleGetLeaderboard() {
   var lbById = {};
   sheetToObjects('Leaderboard').forEach(function(r) { lbById[String(r.user_id)] = r; });
 
-  var users = sheetToObjects('Users');
-  var board = users.map(function(u) {
-    var r  = lbById[String(u.id)] || {};
-    var gp = Number(r.group_pts) || 0, bp = Number(r.bracket_pts) || 0, mp = Number(r.macro_pts) || 0;
-    var total = (r.total !== undefined && r.total !== '') ? Number(r.total) : (gp + bp + mp);
-    return { user_id: u.id, display_name: u.display_name, group_pts: gp, bracket_pts: bp, macro_pts: mp, total: total };
+  // Per-user tiebreaker data from raw predictions: # of exact (5-pt) scores, and the
+  // earliest pick timestamp (when they first locked picks in).
+  var exactById = {}, earliestById = {};
+  sheetToObjects('GroupPredictions').forEach(function(p) {
+    var uid = String(p.user_id);
+    if (Number(p.pts_awarded) === 5) exactById[uid] = (exactById[uid] || 0) + 1;
+    if (p.updated_at) {
+      var t = new Date(p.updated_at).getTime();
+      if (!isNaN(t) && (earliestById[uid] === undefined || t < earliestById[uid])) earliestById[uid] = t;
+    }
   });
 
-  // Sort by total desc, then name; tie-aware ranks (equal totals share a rank).
-  board.sort(function(a, b) { return (b.total - a.total) || String(a.display_name).localeCompare(String(b.display_name)); });
-  var lastTotal = null, lastRank = 0;
+  var users = sheetToObjects('Users');
+  var board = users.map(function(u) {
+    var uid = String(u.id);
+    var r  = lbById[uid] || {};
+    var gp = Number(r.group_pts) || 0, bp = Number(r.bracket_pts) || 0, mp = Number(r.macro_pts) || 0;
+    var total = (r.total !== undefined && r.total !== '') ? Number(r.total) : (gp + bp + mp);
+    return {
+      user_id: u.id, display_name: u.display_name,
+      group_pts: gp, bracket_pts: bp, macro_pts: mp, total: total,
+      exact: exactById[uid] || 0,
+      earliest_ts: earliestById[uid] === undefined ? Infinity : earliestById[uid]
+    };
+  });
+
+  // Tiebreakers: total -> most exact scores -> best group-stage pts -> earliest to submit -> name.
+  // Two players share a rank only when ALL of those keys are equal.
+  function cmp(a, b) {
+    return (b.total - a.total)
+        || (b.exact - a.exact)
+        || (b.group_pts - a.group_pts)
+        || (a.earliest_ts - b.earliest_ts)
+        || String(a.display_name).localeCompare(String(b.display_name));
+  }
+  function tied(a, b) {
+    return a.total === b.total && a.exact === b.exact && a.group_pts === b.group_pts && a.earliest_ts === b.earliest_ts;
+  }
+  board.sort(cmp);
+  var lastRank = 0;
   board.forEach(function(m, i) {
-    if (m.total !== lastTotal) { lastRank = i + 1; lastTotal = m.total; }
+    if (i === 0 || !tied(m, board[i - 1])) lastRank = i + 1;
     m.rank = lastRank;
   });
 
@@ -241,6 +270,48 @@ function handleGetUserPicks(userId) {
     macro_picks: macroPicks.length ? macroPicks[0] : null
   };
 }
+
+// ── Audit (read-only diagnostic; run manually from the editor) ─────────────────
+// auditBen() — or auditUser('Some Name') — logs a user's saved group picks with
+// timestamps + flags any finished game they have NO saved pick for. Pure reads.
+function auditUser(name) {
+  var users = sheetToObjects('Users');
+  var target = String(name || '').toLowerCase().trim();
+  var u = users.find(function(x) { return String(x.display_name).toLowerCase().trim() === target; });
+  if (!u) { Logger.log('No user named "' + name + '"'); return; }
+
+  var fixtures = sheetToObjects('Fixtures');
+  var byId = {};
+  fixtures.forEach(function(f) { byId[String(f.id)] = f; });
+
+  var preds = sheetToObjects('GroupPredictions').filter(function(p) { return p.user_id === u.id; });
+  preds.sort(function(a, b) { return Number(a.fixture_id) - Number(b.fixture_id); });
+
+  Logger.log('=== ' + u.display_name + ' (id ' + u.id + ', joined ' + u.joined_at + ') ===');
+  Logger.log('Saved group predictions: ' + preds.length);
+  preds.forEach(function(p) {
+    var f = byId[String(p.fixture_id)] || {};
+    Logger.log('  #' + p.fixture_id + ' ' + f.home + ' v ' + f.away +
+      ' | pred ' + p.home_pred + '-' + p.away_pred +
+      ' | actual ' + f.home_score + '-' + f.away_score + ' (' + f.status + ')' +
+      ' | pts=' + p.pts_awarded + ' | saved ' + p.updated_at);
+  });
+
+  Logger.log('--- Finished group games with NO saved pick from this user ---');
+  var anyMissing = false;
+  fixtures.forEach(function(f) {
+    if (f.phase !== 'group' || f.status !== 'final') return;
+    var has = preds.some(function(p) { return String(p.fixture_id) === String(f.id); });
+    if (!has) {
+      anyMissing = true;
+      Logger.log('  MISSING #' + f.id + ' ' + f.home + ' v ' + f.away +
+        ' (final ' + f.home_score + '-' + f.away_score + ', kickoff ' + f.utc_date + ')');
+    }
+  });
+  if (!anyMissing) Logger.log('  (none — every finished game has a saved pick)');
+}
+
+function auditBen() { auditUser('Ben Steck'); }
 
 function handleSubmitGroupPicks(userId, picks) {
   // Optional manual "freeze everything" override (defaults false; no longer auto-set by phase).

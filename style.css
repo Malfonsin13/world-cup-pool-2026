@@ -440,6 +440,7 @@ body {
 .rank-cell  { font-size: 1.1rem; width: 60px; }
 .name-cell  { font-weight: 600; }
 .total-col  { font-size: 1rem; }
+.exact-col  { color: var(--muted); }
 .you-badge  { background: var(--green); color: #fff; font-size: 0.7rem; border-radius: 4px; padding: 1px 5px; margin-left: 4px; }
 .grp-badge  { margin-left: 4px; }
 .empty-state { text-align: center; padding: 2rem; color: var(--muted); }

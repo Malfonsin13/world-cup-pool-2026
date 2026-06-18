@@ -49,7 +49,7 @@ Router.register('leaderboard', async function(container) {
   }
 
   const rows = lb.length === 0
-    ? `<tr><td colspan="6" class="empty-state">No players yet — be the first to join!</td></tr>`
+    ? `<tr><td colspan="7" class="empty-state">No players yet — be the first to join!</td></tr>`
     : lb.map((row, i) => {
         const isMe = row.user_id === currentUser.id;
         const rank = row.rank || (i + 1);
@@ -62,6 +62,7 @@ Router.register('leaderboard', async function(container) {
             <td class="rank-cell">${medal}</td>
             <td class="name-cell">${row.display_name}${isMe ? ' <span class="you-badge">you</span>' : ''}${isBestGroup ? ' <span class="grp-badge">📊</span>' : ''}</td>
             <td class="pts-cell">${row.group_pts || 0}</td>
+            <td class="pts-cell exact-col">${row.exact || 0}</td>
             <td class="pts-cell">${row.bracket_pts || 0}</td>
             <td class="pts-cell">${row.macro_pts || 0}</td>
             <td class="pts-cell total-col"><strong>${row.total || 0}</strong></td>
@@ -82,6 +83,7 @@ Router.register('leaderboard', async function(container) {
               <th>Rank</th>
               <th>Player</th>
               <th title="Group Stage Points">Group</th>
+              <th title="Exact scores (tiebreaker)">Exact</th>
               <th title="Bracket Points">Bracket</th>
               <th title="Macro Pick Points">Macro</th>
               <th>Total</th>
@@ -91,6 +93,7 @@ Router.register('leaderboard', async function(container) {
         </table>
       </div>
       <p class="lb-note">Scores update automatically every 15 minutes during matches.</p>
+      <p class="lb-note">Ties broken by: most exact scores → best group-stage points → earliest to submit picks.</p>
     </div>
   `;
 });
