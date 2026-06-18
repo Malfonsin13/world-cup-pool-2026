@@ -397,6 +397,67 @@ function rebuildLeaderboard() {
   });
 }
 
+// Re-run group scoring for every finished group game (kept-row points stay correct after a dedup).
+function rescoreAllFinalGroupGames() {
+  sheetToObjects('Fixtures').forEach(function(f) {
+    if (f.phase === 'group' && f.status === 'final') {
+      recalculateGroupScores(f.id, Number(f.home_score), Number(f.away_score));
+    }
+  });
+  rebuildLeaderboard();
+}
+
+// ── One-off cleanup: remove duplicate group predictions ───────────────────────
+// Some users have >1 row per game (an old save path created duplicates instead of
+// updating), which double-counts in the leaderboard. For each (user, fixture) this
+// KEEPS the player's latest pick and deletes the rest — preferring the latest pick
+// made BEFORE kickoff for games already played, so nobody benefits from a post-result
+// row. Then it rescores finished games and rebuilds the leaderboard. Run ONCE.
+function dedupeGroupPredictions() {
+  var s = sheet('GroupPredictions');
+  var data = s.getDataRange().getValues();
+  var headers = data[0];
+  var userCol = headers.indexOf('user_id');
+  var fixCol  = headers.indexOf('fixture_id');
+  var updCol  = headers.indexOf('updated_at');
+
+  var kickoff = {};
+  sheetToObjects('Fixtures').forEach(function(f) {
+    kickoff[String(f.id)] = f.utc_date ? new Date(f.utc_date).getTime() : null;
+  });
+
+  // Group row indices (0-based into `data`) by user|fixture
+  var groups = {};
+  for (var i = 1; i < data.length; i++) {
+    var k = String(data[i][userCol]) + '|' + String(data[i][fixCol]);
+    (groups[k] = groups[k] || []).push(i);
+  }
+
+  var toDelete = [];
+  Object.keys(groups).forEach(function(k) {
+    var idxs = groups[k];
+    if (idxs.length < 2) return;
+    var ko = kickoff[k.split('|')[1]];
+    idxs.sort(function(a, b) {
+      var ta = new Date(data[a][updCol]).getTime() || 0;
+      var tb = new Date(data[b][updCol]).getTime() || 0;
+      if (ko) { // prefer rows saved before kickoff
+        var va = ta <= ko, vb = tb <= ko;
+        if (va !== vb) return va ? -1 : 1;
+      }
+      return tb - ta; // then latest first
+    });
+    idxs.slice(1).forEach(function(ix) { toDelete.push(ix); }); // keep idxs[0]
+  });
+
+  // Delete bottom-up so earlier indices stay valid (sheet row = data index + 1)
+  toDelete.sort(function(a, b) { return b - a; }).forEach(function(ix) { s.deleteRow(ix + 1); });
+  Logger.log('Deleted ' + toDelete.length + ' duplicate prediction rows.');
+
+  rescoreAllFinalGroupGames();
+  Logger.log('Rescored finished games and rebuilt the leaderboard.');
+}
+
 // ── Time Trigger Setup ────────────────────────────────────────────────────────
 // Run this function ONCE manually in the Apps Script editor to set up the trigger.
 

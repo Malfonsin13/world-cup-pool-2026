@@ -313,11 +313,44 @@ function auditUser(name) {
 
 function auditBen() { auditUser('Ben Steck'); }
 
+// Read-only: report how widespread the duplicate-prediction problem is, per user.
+function findDuplicateGroupPicks() {
+  var rows = sheetToObjects('GroupPredictions');
+  var users = sheetToObjects('Users');
+  var nameById = {};
+  users.forEach(function(u) { nameById[u.id] = u.display_name; });
+
+  var counts = {};
+  rows.forEach(function(r) {
+    var k = String(r.user_id) + '|' + String(r.fixture_id);
+    counts[k] = (counts[k] || 0) + 1;
+  });
+  var perUser = {};
+  Object.keys(counts).forEach(function(k) {
+    if (counts[k] > 1) {
+      var uid = k.split('|')[0];
+      perUser[uid] = (perUser[uid] || 0) + (counts[k] - 1); // extra rows beyond the keeper
+    }
+  });
+
+  Logger.log('Total GroupPredictions rows: ' + rows.length);
+  var uids = Object.keys(perUser);
+  if (!uids.length) { Logger.log('No duplicates found.'); return; }
+  Logger.log('Users with duplicate picks (extra rows to remove):');
+  uids.sort(function(a, b) { return perUser[b] - perUser[a]; })
+      .forEach(function(uid) { Logger.log('  ' + (nameById[uid] || uid) + ': ' + perUser[uid]); });
+}
+
 function handleSubmitGroupPicks(userId, picks) {
   // Optional manual "freeze everything" override (defaults false; no longer auto-set by phase).
   if (getConfig('picks_locked') === 'true') return { error: 'Picks are locked' };
   if (!picks || !Array.isArray(picks)) return { error: 'Invalid picks format' };
 
+  // Serialize saves so two concurrent submits (double-click / two tabs) can't both read an
+  // empty snapshot and each append a row — the cause of duplicate predictions.
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(15000); } catch (e) { return { error: 'Server busy — please try again.' }; }
+  try {
   var kickoff = getFixtureKickoffMap();
   var nowMs = Date.now();
 
@@ -362,6 +395,9 @@ function handleSubmitGroupPicks(userId, picks) {
   });
 
   return { success: true, saved: saved, rejected: rejected };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function handleSubmitBracketPick(userId, round, matchIndex, teamPicked) {
