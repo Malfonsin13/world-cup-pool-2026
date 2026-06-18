@@ -254,6 +254,26 @@ Router.register('rules', async function(container) {
         </div>
       </section>
 
+      <!-- Tiebreakers -->
+      <section class="rules-section">
+        <h2 class="rules-section-title">🤝 Tiebreakers</h2>
+        <div class="rules-howto">
+          <div class="howto-item">
+            <span class="howto-num">1</span>
+            <div><strong>Most exact scores</strong> — whoever nailed more games on the dot (5-pointers).</div>
+          </div>
+          <div class="howto-item">
+            <span class="howto-num">2</span>
+            <div><strong>Best group-stage points</strong> — the higher group-stage total breaks it next.</div>
+          </div>
+          <div class="howto-item">
+            <span class="howto-num">3</span>
+            <div><strong>Earliest to submit picks</strong> — if still tied, whoever locked in their predictions first ranks higher.</div>
+          </div>
+        </div>
+        <p class="rules-note">Applied in order whenever two players have the same total points. The "Exact" column on the Leaderboard shows everyone's exact-score count.</p>
+      </section>
+
     </div>
   `;
 });

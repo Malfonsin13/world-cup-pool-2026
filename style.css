@@ -24,6 +24,41 @@ body {
   min-height: 100vh;
 }
 
+/* ── Site notice (rolling red banner) ──────────────────────────────────────── */
+.notice-banner {
+  position: relative;
+  background: var(--red);
+  color: #fff;
+  overflow: hidden;
+  white-space: nowrap;
+  padding: 0.5rem 2rem 0.5rem 0;
+}
+.notice-track {
+  display: inline-block;
+  font-size: 0.9rem;
+  font-weight: 700;
+  will-change: transform;
+  animation: notice-scroll 32s linear infinite;
+}
+@keyframes notice-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.notice-banner:hover .notice-track { animation-play-state: paused; }
+.notice-dismiss {
+  position: absolute;
+  top: 50%;
+  right: 0.5rem;
+  transform: translateY(-50%);
+  background: rgba(0,0,0,.2);
+  border: none;
+  color: #fff;
+  font-size: 1.1rem;
+  line-height: 1;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.notice-dismiss:hover { background: rgba(0,0,0,.35); }
+
 /* ── Nav ───────────────────────────────────────────────────────────────────── */
 #nav {
   background: var(--green);
