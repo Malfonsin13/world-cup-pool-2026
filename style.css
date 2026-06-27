@@ -673,6 +673,24 @@ body {
 
 /* ── Bracket ───────────────────────────────────────────────────────────────── */
 .bracket-scoring-note { font-size: 0.82rem; color: var(--muted); margin-bottom: 1.25rem; }
+
+/* Auto-save toast (fixed, bottom-center) */
+.bracket-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 1.25rem;
+  transform: translateX(-50%);
+  z-index: 200;
+  padding: 0.55rem 1.1rem;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(0,0,0,.25);
+}
+.bracket-toast.toast-saving { background: var(--muted); }
+.bracket-toast.toast-saved  { background: var(--green); }
+.bracket-toast.toast-error  { background: var(--red); }
 .bracket-round { margin-bottom: 2rem; }
 .bracket-round h2 {
   font-size: 1.05rem;

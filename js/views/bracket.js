@@ -135,7 +135,7 @@ Router.register('bracket', async function (container) {
     ? `<div class="banner banner-info">🏆 The bracket opens as the Round-of-32 matchups are decided. Come back as groups finish to pick winners; it all locks at the first knockout game, <strong>Sunday, June 28 at 3 PM ET</strong>.</div>`
     : bracketLocked
       ? `<div class="banner banner-warning">🔒 Bracket locked — the knockout stage has begun. Your picks are final.</div>`
-      : `<div class="banner banner-info">Pick the winner of each matchup that's set — your picks carry up to the champion. Matchups still being decided stay <strong>TBD</strong>. Complete your bracket before <strong>Sunday, June 28 at 3 PM ET</strong>, when it locks.</div>`;
+      : `<div class="banner banner-info">Pick the winner of each matchup that's set — your picks carry up to the champion. Matchups still being decided stay <strong>TBD</strong>. <strong>Each pick saves automatically</strong> (no Save button). Complete your bracket before <strong>Sunday, June 28 at 3 PM ET</strong>, when it locks.</div>`;
 
   const user = Auth.getUser();
   function progressHTML() {
@@ -151,12 +151,23 @@ Router.register('bracket', async function (container) {
         <span class="user-badge">${user.display_name}</span>
       </div>
       ${banner}
-      <div id="bracket-status" class="status-msg hidden"></div>
       <div class="btree-scroll-wrap" id="btree-wrap">${treeHTML()}</div>
       <div id="btree-progress">${progressHTML()}</div>
+      <div id="bracket-toast" class="bracket-toast" style="display:none;"></div>
     </div>`;
 
   if (DEMO || bracketLocked) return;
+
+  let toastTimer = null;
+  function toast(msg, kind) {
+    const el = document.getElementById('bracket-toast');
+    if (!el) return;
+    el.textContent = msg;
+    el.className = 'bracket-toast toast-' + kind;
+    el.style.display = 'block';
+    clearTimeout(toastTimer);
+    if (kind === 'saved') toastTimer = setTimeout(() => { el.style.display = 'none'; }, 1600);
+  }
 
   function rerender() {
     document.getElementById('btree-wrap').innerHTML = treeHTML();
@@ -172,7 +183,7 @@ Router.register('bracket', async function (container) {
         picks[`${round}_${idx}`] = team;
         const cleared = prune();
         rerender();
-        const statusEl = document.getElementById('bracket-status');
+        toast('Saving…', 'saving');
         try {
           let res = await API.postAuth({ action: 'submitBracketPick', round, match_index: idx, team_picked: team });
           if (res.error) throw new Error(res.error);
@@ -180,10 +191,9 @@ Router.register('bracket', async function (container) {
             await API.postAuth({ action: 'submitBracketPick', round: c.round, match_index: c.idx, team_picked: '' });
           }
           API.invalidate('getUserPicks');
-          statusEl.className = 'status-msg hidden';
+          toast('✓ Saved', 'saved');
         } catch (err) {
-          statusEl.textContent = 'Error saving pick: ' + err.message;
-          statusEl.className = 'status-msg error';
+          toast('⚠️ Not saved — tap the pick again', 'error');
         }
       });
     });
