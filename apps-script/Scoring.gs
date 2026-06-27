@@ -94,27 +94,26 @@ function autoFetchResults() {
   }
 }
 
-// Load the 16 Round-of-32 matchups from ESPN (teams + kickoff) once they're all decided.
-// Sets bracket_lock to the real first-game kickoff. Idempotent.
+// Load Round-of-32 matchups from ESPN as they get decided (partial is fine — a slot whose
+// teams aren't set yet stays TBD). match_index = position in the date-sorted 16-game list
+// (stable, matches ESPN's "Round of 32 N" bracket numbering). Sets bracket_lock to the first
+// R32 kickoff. Idempotent.
 function autoFetchKnockoutBracket(events) {
   function real(n) { return n && !/Winner|Place|Round of/i.test(n); }
   function side(e, ha) { var c = e.competitions && e.competitions[0]; return c && c.competitors.find(function(x) { return x.homeAway === ha; }); }
 
   var r32 = events.filter(function(e) { return (e.season && e.season.slug) === 'round-of-32'; })
-                  .sort(function(a, b) { return new Date(a.date) - new Date(b.date); });
+                  .sort(function(a, b) { return (new Date(a.date) - new Date(b.date)) || String(a.id).localeCompare(String(b.id)); });
   if (r32.length !== 16) return false;
-  var allReal = r32.every(function(e) {
-    var h = side(e, 'home'), a = side(e, 'away');
-    return h && a && h.team && a.team && real(h.team.displayName) && real(a.team.displayName);
-  });
-  if (!allReal) return false; // wait until the full set is known
 
   var firstKick = null;
   r32.forEach(function(e, i) {
-    var h = side(e, 'home'), a = side(e, 'away');
-    upsertKnockoutFixture('R32', i + 1, canonTeam(h.team.displayName), canonTeam(a.team.displayName), '', '', e.date);
     var ko = new Date(e.date).getTime();
     if (!isNaN(ko) && (firstKick === null || ko < firstKick)) firstKick = ko;
+    var h = side(e, 'home'), a = side(e, 'away');
+    if (!h || !a || !h.team || !a.team) return;
+    if (!real(h.team.displayName) || !real(a.team.displayName)) return; // not decided yet — leave TBD
+    upsertKnockoutFixture('R32', i + 1, canonTeam(h.team.displayName), canonTeam(a.team.displayName), '', '', e.date);
   });
   if (firstKick !== null) setConfig('bracket_lock', new Date(firstKick).toISOString());
   return true;

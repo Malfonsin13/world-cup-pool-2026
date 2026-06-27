@@ -1,8 +1,8 @@
-// ── Knockout Bracket — predict-to-champion (March Madness tree) ───────────────
-// Once the 16 Round-of-32 matchups are loaded (auto from ESPN), players pick the
-// winner of every matchup; their picks PROPAGATE up the tree (your R32 winners
-// become the R16 matchup, etc.) all the way to the champion. Locks at the first
-// knockout kickoff. Scored by team advancement (server-side).
+// ── Knockout Bracket — predict-to-champion (real FIFA tree) ───────────────────
+// R32 matchups auto-load from ESPN as they're decided (partial is fine — undecided
+// matchups stay TBD/grayed). Players pick the winner of each set matchup; picks
+// propagate up the real bracket tree to the champion. Locks at the first knockout
+// kickoff. Scored by team advancement (server-side).
 
 Router.register('bracket', async function (container) {
   const [picksData, fixturesData, configData] = await Promise.all([
@@ -14,34 +14,42 @@ Router.register('bracket', async function (container) {
   const offset = window.__clockOffset || 0;
   const lockMs = configData.bracket_lock ? new Date(configData.bracket_lock).getTime() : null;
   const bracketLocked = lockMs !== null && (Date.now() - offset) >= lockMs;
-  const winners = configData.knockout_winners || {};   // { R32: { team: true }, ... }
+  const winners = configData.knockout_winners || {};
 
-  // R32 matchups from our knockout fixtures (auto-loaded once the group stage ends)
+  // R32 matchups from our knockout fixtures (auto-loaded from ESPN, possibly partial)
   const r32 = {}; // match_index -> { home, away }
   (fixturesData.fixtures || [])
     .filter(f => f.phase === 'knockout' && f.round === 'R32')
-    .forEach(f => { r32[f.match_index] = { home: f.home, away: f.away }; });
-  const r32Ready = Object.keys(r32).length === 16 &&
-    [...Array(16)].every((_, i) => r32[i + 1] && r32[i + 1].home && r32[i + 1].away);
-  const DEMO = !r32Ready;
+    .forEach(f => { if (f.home && f.away) r32[f.match_index] = { home: f.home, away: f.away }; });
+  const DEMO = Object.keys(r32).length === 0;   // open as soon as ANY R32 matchup is set
 
   // The player's picks: 'round_idx' -> team
   const picks = {};
   (picksData.bracket_picks || []).forEach(p => { if (p.team_picked) picks[`${p.round}_${p.match_index}`] = p.team_picked; });
 
-  const PREV = { R16: 'R32', QF: 'R16', SF: 'QF', Final: 'SF' };
-  const SLOTS = { R32: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16], R16: [1,2,3,4,5,6,7,8], QF: [1,2,3,4], SF: [1,2], Final: [1] };
+  // Real FIFA bracket topology (from ESPN). Each later-round slot is fed by two specific
+  // prior-round slots.
+  const FEEDS = {
+    R16: { 1:[['R32',1],['R32',3]], 2:[['R32',2],['R32',5]], 3:[['R32',4],['R32',6]], 4:[['R32',7],['R32',8]],
+           5:[['R32',11],['R32',12]], 6:[['R32',9],['R32',10]], 7:[['R32',14],['R32',16]], 8:[['R32',13],['R32',15]] },
+    QF:  { 1:[['R16',1],['R16',2]], 2:[['R16',5],['R16',6]], 3:[['R16',3],['R16',4]], 4:[['R16',7],['R16',8]] },
+    SF:  { 1:[['QF',1],['QF',2]], 2:[['QF',3],['QF',4]] },
+    Final: { 1:[['SF',1],['SF',2]] }
+  };
+  // Visual column order so the tree's consecutive-pair connectors line up with the real feeds.
+  const VIS = {
+    left:  { R32:[1,3,2,5,11,12,9,10], R16:[1,2,5,6], QF:[1,2], SF:[1] },
+    right: { R32:[4,6,7,8,14,16,13,15], R16:[3,4,7,8], QF:[3,4], SF:[2] }
+  };
+  const SLOTS = { R16:[1,2,3,4,5,6,7,8], QF:[1,2,3,4], SF:[1,2], Final:[1] };
   const PTS = CONFIG.SCORING.bracket;
 
-  // The two candidate teams for a slot: R32 = the fixture's teams; later rounds = the
-  // player's winners of the two feeding slots in the previous round.
   function candidates(round, idx) {
     if (round === 'R32') { const m = r32[idx] || {}; return [m.home || null, m.away || null]; }
-    const prev = PREV[round];
-    return [picks[`${prev}_${2 * idx - 1}`] || null, picks[`${prev}_${2 * idx}`] || null];
+    const f = FEEDS[round][idx];
+    return [picks[`${f[0][0]}_${f[0][1]}`] || null, picks[`${f[1][0]}_${f[1][1]}`] || null];
   }
 
-  // Drop any downstream pick that is no longer a valid candidate (upstream winner changed).
   function prune() {
     const cleared = [];
     ['R16', 'QF', 'SF', 'Final'].forEach(round => {
@@ -52,15 +60,14 @@ Router.register('bracket', async function (container) {
     });
     return cleared;
   }
-  prune(); // tidy any stale loaded state for display
+  prune();
 
   function filledCount() {
-    let n = 0;
-    Object.keys(SLOTS).forEach(r => SLOTS[r].forEach(i => { if (picks[`${r}_${i}`]) n++; }));
+    let n = Object.keys(r32).reduce((a, i) => a + (picks[`R32_${i}`] ? 1 : 0), 0);
+    ['R16', 'QF', 'SF', 'Final'].forEach(r => SLOTS[r].forEach(i => { if (picks[`${r}_${i}`]) n++; }));
     return n;
   }
 
-  // ── Render one matchup card ───────────────────────────────────────────────
   function renderCard(round, idx) {
     const key = `${round}_${idx}`;
     const cands = candidates(round, idx);
@@ -109,32 +116,32 @@ Router.register('bracket', async function (container) {
     return `
       <div class="btree" id="btree">
         <div class="btree-half btree-left">
-          ${buildRoundCol('R32', [1,2,3,4,5,6,7,8], 'left')}
-          ${buildRoundCol('R16', [1,2,3,4], 'left')}
-          ${buildRoundCol('QF',  [1,2], 'left')}
-          ${buildRoundCol('SF',  [1], 'left')}
+          ${buildRoundCol('R32', VIS.left.R32, 'left')}
+          ${buildRoundCol('R16', VIS.left.R16, 'left')}
+          ${buildRoundCol('QF',  VIS.left.QF, 'left')}
+          ${buildRoundCol('SF',  VIS.left.SF, 'left')}
         </div>
         ${buildFinalCol()}
         <div class="btree-half btree-right">
-          ${buildRoundCol('SF',  [2], 'right')}
-          ${buildRoundCol('QF',  [3,4], 'right')}
-          ${buildRoundCol('R16', [5,6,7,8], 'right')}
-          ${buildRoundCol('R32', [9,10,11,12,13,14,15,16], 'right')}
+          ${buildRoundCol('SF',  VIS.right.SF, 'right')}
+          ${buildRoundCol('QF',  VIS.right.QF, 'right')}
+          ${buildRoundCol('R16', VIS.right.R16, 'right')}
+          ${buildRoundCol('R32', VIS.right.R32, 'right')}
         </div>
       </div>`;
   }
 
   const banner = DEMO
-    ? `<div class="banner banner-info">🏆 The bracket opens automatically once the group stage ends (Sun Jun 28) and the 32 teams are set. Come back then to fill out your <strong>whole bracket to the champion</strong> — it locks at the first knockout game, <strong>3 PM ET Jun 28</strong>.</div>`
+    ? `<div class="banner banner-info">🏆 The bracket opens as the Round-of-32 matchups are decided. Come back as groups finish to pick winners; it all locks at the first knockout game, <strong>Sunday, June 28 at 3 PM ET</strong>.</div>`
     : bracketLocked
       ? `<div class="banner banner-warning">🔒 Bracket locked — the knockout stage has begun. Your picks are final.</div>`
-      : `<div class="banner banner-info">Pick the winner of every matchup — your picks carry forward up the tree to the champion. Fill it all in before the first knockout game (<strong>3 PM ET Jun 28</strong>), when it locks.</div>`;
+      : `<div class="banner banner-info">Pick the winner of each matchup that's set — your picks carry up to the champion. Matchups still being decided stay <strong>TBD</strong>. Complete your bracket before <strong>Sunday, June 28 at 3 PM ET</strong>, when it locks.</div>`;
 
   const user = Auth.getUser();
   function progressHTML() {
     if (DEMO) return '';
     const champ = picks['Final_1'];
-    return `<p class="btree-demo-note">${filledCount()}/31 picks made${champ ? ` · 🏆 Your champion: <strong>${champ}</strong>` : ''}</p>`;
+    return `<p class="btree-demo-note">${filledCount()} picks made${champ ? ` · 🏆 Your champion: <strong>${champ}</strong>` : ''}</p>`;
   }
 
   container.innerHTML = `
@@ -151,7 +158,6 @@ Router.register('bracket', async function (container) {
 
   if (DEMO || bracketLocked) return;
 
-  // ── Reactive picking ──────────────────────────────────────────────────────
   function rerender() {
     document.getElementById('btree-wrap').innerHTML = treeHTML();
     document.getElementById('btree-progress').innerHTML = progressHTML();
@@ -164,8 +170,8 @@ Router.register('bracket', async function (container) {
         const round = btn.dataset.round, idx = parseInt(btn.dataset.idx), team = btn.dataset.team;
         if (picks[`${round}_${idx}`] === team) return;
         picks[`${round}_${idx}`] = team;
-        const cleared = prune();   // drop now-invalid downstream picks
-        rerender();                // reflect propagation immediately
+        const cleared = prune();
+        rerender();
         const statusEl = document.getElementById('bracket-status');
         try {
           let res = await API.postAuth({ action: 'submitBracketPick', round, match_index: idx, team_picked: team });
