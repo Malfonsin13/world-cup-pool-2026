@@ -34,6 +34,8 @@ function canonTeam(name) {
 
 var ESPN_WC_URL = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260611-20260719';
 
+var KO_ROUND = { 'round-of-32': 'R32', 'round-of-16': 'R16', 'quarterfinals': 'QF', 'semifinals': 'SF', 'final': 'Final' };
+
 function autoFetchResults() {
   try {
     var response = UrlFetchApp.fetch(ESPN_WC_URL, { muteHttpExceptions: true });
@@ -48,11 +50,13 @@ function autoFetchResults() {
       return;
     }
 
-    var updated = false;
+    // 1. Open the bracket once ESPN has all 16 R32 matchups with real teams.
+    autoFetchKnockoutBracket(events);
+
+    // 2. Record completed GROUP results into our fixtures.
     events.forEach(function(ev) {
       var type = ev.status && ev.status.type;
-      var completed = type && (type.completed === true || type.state === 'post');
-      if (!completed) return; // only score truly finished games
+      if (!(type && (type.completed === true || type.state === 'post'))) return;
 
       var comp = ev.competitions && ev.competitions[0];
       if (!comp || !comp.competitors) return;
@@ -63,16 +67,12 @@ function autoFetchResults() {
       var apiHome = canonTeam(home.team.displayName || home.team.name || home.team.shortDisplayName);
       var apiAway = canonTeam(away.team.displayName || away.team.name || away.team.shortDisplayName);
       var fixtureRow = findFixtureByTeams(apiHome, apiAway);
-      if (!fixtureRow) return;
-      if (fixtureRow.status === 'final') return; // already scored
+      if (!fixtureRow || fixtureRow.phase !== 'group') return; // group results only here
+      if (fixtureRow.status === 'final') return;
 
-      // Defensive: never accept a result for a game whose scheduled kickoff hasn't arrived yet.
       if (fixtureRow.utc_date) {
         var ko = new Date(fixtureRow.utc_date).getTime();
-        if (!isNaN(ko) && ko > Date.now()) {
-          Logger.log('Skip (kickoff in future): ' + apiHome + ' v ' + apiAway);
-          return;
-        }
+        if (!isNaN(ko) && ko > Date.now()) { Logger.log('Skip (kickoff future): ' + apiHome + ' v ' + apiAway); return; }
       }
 
       var homeScore = parseInt(home.score, 10);
@@ -80,12 +80,92 @@ function autoFetchResults() {
       if (isNaN(homeScore) || isNaN(awayScore)) return;
 
       updateFixtureResult(fixtureRow.id, homeScore, awayScore);
-      updated = true;
     });
 
-    if (updated) rebuildLeaderboard();
+    // 3. Score the knockout bracket by team advancement (ESPN round winners), and cache the
+    //    winners so the frontend can mark each pick won/lost without its own ESPN call.
+    var winners = getKnockoutWinnersByRound(events);
+    setConfig('knockout_winners', JSON.stringify(winners));
+    scoreBracketByAdvancement(winners);
+
+    rebuildLeaderboard();
   } catch (err) {
     Logger.log('autoFetchResults error: ' + err.message);
+  }
+}
+
+// Load the 16 Round-of-32 matchups from ESPN (teams + kickoff) once they're all decided.
+// Sets bracket_lock to the real first-game kickoff. Idempotent.
+function autoFetchKnockoutBracket(events) {
+  function real(n) { return n && !/Winner|Place|Round of/i.test(n); }
+  function side(e, ha) { var c = e.competitions && e.competitions[0]; return c && c.competitors.find(function(x) { return x.homeAway === ha; }); }
+
+  var r32 = events.filter(function(e) { return (e.season && e.season.slug) === 'round-of-32'; })
+                  .sort(function(a, b) { return new Date(a.date) - new Date(b.date); });
+  if (r32.length !== 16) return false;
+  var allReal = r32.every(function(e) {
+    var h = side(e, 'home'), a = side(e, 'away');
+    return h && a && h.team && a.team && real(h.team.displayName) && real(a.team.displayName);
+  });
+  if (!allReal) return false; // wait until the full set is known
+
+  var firstKick = null;
+  r32.forEach(function(e, i) {
+    var h = side(e, 'home'), a = side(e, 'away');
+    upsertKnockoutFixture('R32', i + 1, canonTeam(h.team.displayName), canonTeam(a.team.displayName), '', '', e.date);
+    var ko = new Date(e.date).getTime();
+    if (!isNaN(ko) && (firstKick === null || ko < firstKick)) firstKick = ko;
+  });
+  if (firstKick !== null) setConfig('bracket_lock', new Date(firstKick).toISOString());
+  return true;
+}
+
+// Set of teams that WON their game in each knockout round, from ESPN. { R32:{team:true}, ... }
+function getKnockoutWinnersByRound(events) {
+  if (!events) {
+    try {
+      var resp = UrlFetchApp.fetch(ESPN_WC_URL, { muteHttpExceptions: true });
+      if (resp.getResponseCode() !== 200) return {};
+      events = (JSON.parse(resp.getContentText()) || {}).events || [];
+    } catch (e) { return {}; }
+  }
+  var winners = {};
+  events.forEach(function(e) {
+    var r = KO_ROUND[e.season && e.season.slug];
+    if (!r) return; // skip group + 3rd-place-match
+    var type = e.status && e.status.type;
+    if (!(type && (type.completed === true || type.state === 'post'))) return;
+    var c = e.competitions && e.competitions[0];
+    if (!c || !c.competitors) return;
+    var h = c.competitors.find(function(x) { return x.homeAway === 'home'; });
+    var a = c.competitors.find(function(x) { return x.homeAway === 'away'; });
+    if (!h || !a || !h.team || !a.team) return;
+    var hs = parseInt(h.score, 10), as = parseInt(a.score, 10);
+    if (isNaN(hs) || isNaN(as)) return;
+    var w = hs > as ? h.team.displayName : as > hs ? a.team.displayName : null;
+    if (!w) return;
+    (winners[r] = winners[r] || {})[canonTeam(w)] = true;
+  });
+  return winners;
+}
+
+// Score every bracket pick: points if the team you picked actually won its game that round.
+function scoreBracketByAdvancement(winners) {
+  winners = winners || getKnockoutWinnersByRound();
+  var s = sheet('BracketPredictions');
+  var data = s.getDataRange().getValues();
+  if (data.length < 2) return;
+  var headers = data[0];
+  var roundCol = headers.indexOf('round');
+  var pickCol  = headers.indexOf('team_picked');
+  var corCol   = headers.indexOf('is_correct');
+  var ptsCol   = headers.indexOf('pts_awarded');
+  for (var i = 1; i < data.length; i++) {
+    var r = data[i][roundCol];
+    var won = winners[r] && winners[r][canonTeam(data[i][pickCol])];
+    var pts = won ? ((BRACKET_PTS[r] || 0) + (r === 'Final' ? CHAMPION_BONUS : 0)) : 0;
+    s.getRange(i + 1, corCol + 1).setValue(!!won);
+    s.getRange(i + 1, ptsCol + 1).setValue(pts);
   }
 }
 
@@ -121,10 +201,9 @@ function updateFixtureResult(fixtureId, homeScore, awayScore) {
   s.getRange(row, headers.indexOf('status') + 1).setValue('final');
 
   if (fixture.phase === 'knockout') {
-    // Determine winner (knockout cannot draw — admin should enter the post-ET/PK score)
-    var winner = homeScore > awayScore ? fixture.home
-               : awayScore > homeScore ? fixture.away : null;
-    if (winner) recalculateBracketScores(fixture.round, fixture.match_index, winner);
+    // Bracket is scored by team advancement (scoreBracketByAdvancement), driven off ESPN
+    // round results — re-score the whole bracket so this win counts wherever it was picked.
+    scoreBracketByAdvancement();
   } else {
     recalculateGroupScores(fixtureId, homeScore, awayScore);
   }
@@ -197,7 +276,7 @@ function clearPhantomGame19() {
 // Creates or updates a knockout matchup by round + match_index, optionally with
 // a result. If scores are provided, marks final and scores bracket picks.
 
-function upsertKnockoutFixture(round, matchIndex, home, away, homeScore, awayScore) {
+function upsertKnockoutFixture(round, matchIndex, home, away, homeScore, awayScore, utc) {
   if (!round || !matchIndex || !home || !away) return { error: 'Missing round/match/teams' };
 
   var s = sheet('Fixtures');
@@ -226,6 +305,7 @@ function upsertKnockoutFixture(round, matchIndex, home, away, homeScore, awaySco
   if (existingRow > 0) {
     s.getRange(existingRow, headers.indexOf('home') + 1).setValue(home);
     s.getRange(existingRow, headers.indexOf('away') + 1).setValue(away);
+    if (utc) s.getRange(existingRow, headers.indexOf('utc_date') + 1).setValue(utc);
     if (hasResult) {
       return updateFixtureResult(existingId, parseInt(homeScore, 10), parseInt(awayScore, 10));
     }
@@ -236,7 +316,7 @@ function upsertKnockoutFixture(round, matchIndex, home, away, homeScore, awaySco
   var newId = maxId + 1;
   var rowObj = {
     id: newId, api_id: '', phase: 'knockout', group: '', round: round,
-    match_index: matchIndex, home: home, away: away, utc_date: '',
+    match_index: matchIndex, home: home, away: away, utc_date: utc || '',
     home_score: hasResult ? parseInt(homeScore, 10) : '',
     away_score: hasResult ? parseInt(awayScore, 10) : '',
     status: hasResult ? 'final' : 'pending'

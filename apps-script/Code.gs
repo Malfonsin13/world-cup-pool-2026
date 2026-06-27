@@ -77,7 +77,7 @@ function getTournamentStartMs() {
 // When the knockout bracket freezes (first bracket game kickoff), in epoch ms.
 // The whole bracket locks at once here — not per game. Admin can override via Config.
 function getBracketLockMs() {
-  var v = getConfig('bracket_lock') || '2026-06-28T16:00:00Z'; // default ~ first Round-of-32 kickoff
+  var v = getConfig('bracket_lock') || '2026-06-28T19:00:00Z'; // first Round-of-32 kickoff (3 PM ET)
   var t = new Date(v).getTime();
   return isNaN(t) ? null : t;
 }
@@ -256,7 +256,8 @@ function handleGetConfig() {
     admin_password_set: !!(adminHash && String(adminHash).trim() !== ''),
     server_time: new Date().toISOString(),
     tournament_start: startMs !== null ? new Date(startMs).toISOString() : null,
-    bracket_lock: (function(){ var m = getBracketLockMs(); return m !== null ? new Date(m).toISOString() : null; })()
+    bracket_lock: (function(){ var m = getBracketLockMs(); return m !== null ? new Date(m).toISOString() : null; })(),
+    knockout_winners: (function(){ try { return JSON.parse(getConfig('knockout_winners') || '{}'); } catch (e) { return {}; } })()
   };
 }
 
@@ -406,31 +407,39 @@ function handleSubmitBracketPick(userId, round, matchIndex, teamPicked) {
   if (lockMs !== null && Date.now() >= lockMs) {
     return { error: 'Bracket is locked — the knockout stage has started' };
   }
-  if (!round || !matchIndex || !teamPicked) return { error: 'Missing fields' };
+  if (!round || !matchIndex) return { error: 'Missing fields' };
+  teamPicked = teamPicked || ''; // empty clears the slot (e.g. an upstream change invalidated it)
 
-  var s = sheet('BracketPredictions');
-  var data = s.getDataRange().getValues();
-  var headers = data[0];
-  var userCol = headers.indexOf('user_id');
-  var roundCol = headers.indexOf('round');
-  var idxCol = headers.indexOf('match_index');
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(15000); } catch (e) { return { error: 'Server busy — please try again.' }; }
+  try {
+    var s = sheet('BracketPredictions');
+    var data = s.getDataRange().getValues();
+    var headers = data[0];
+    var userCol = headers.indexOf('user_id');
+    var roundCol = headers.indexOf('round');
+    var idxCol = headers.indexOf('match_index');
 
-  var existingRow = -1;
-  for (var i = 1; i < data.length; i++) {
-    if (data[i][userCol] == userId && data[i][roundCol] == round && data[i][idxCol] == matchIndex) {
-      existingRow = i + 1;
-      break;
+    var existingRow = -1;
+    for (var i = 1; i < data.length; i++) {
+      if (data[i][userCol] == userId && data[i][roundCol] == round && data[i][idxCol] == matchIndex) {
+        existingRow = i + 1;
+        break;
+      }
     }
-  }
 
-  var now = new Date().toISOString();
-  if (existingRow > 0) {
-    s.getRange(existingRow, headers.indexOf('team_picked') + 1).setValue(teamPicked);
-    s.getRange(existingRow, headers.indexOf('updated_at') + 1).setValue(now);
-  } else {
-    s.appendRow([userId, round, matchIndex, teamPicked, '', 0, now]);
+    var now = new Date().toISOString();
+    if (existingRow > 0) {
+      s.getRange(existingRow, headers.indexOf('team_picked') + 1).setValue(teamPicked);
+      s.getRange(existingRow, headers.indexOf('pts_awarded') + 1).setValue(0);   // re-scored on next fetch
+      s.getRange(existingRow, headers.indexOf('updated_at') + 1).setValue(now);
+    } else {
+      s.appendRow([userId, round, matchIndex, teamPicked, '', 0, now]);
+    }
+    return { success: true };
+  } finally {
+    lock.releaseLock();
   }
-  return { success: true };
 }
 
 function handleSubmitMacroPicks(userId, picks) {
