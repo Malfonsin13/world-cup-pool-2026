@@ -850,6 +850,16 @@ body {
   position: relative;
 }
 
+/* Kickoff date/time above each matchup card */
+.b-card-date {
+  font-size: 10px;
+  line-height: 1.2;
+  color: var(--muted, #64748b);
+  text-align: center;
+  margin-bottom: 2px;
+  white-space: nowrap;
+}
+
 /* Horizontal arm: left-side bracket advances rightward */
 .btree-left .b-card::after {
   content: '';

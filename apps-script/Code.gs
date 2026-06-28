@@ -257,7 +257,8 @@ function handleGetConfig() {
     server_time: new Date().toISOString(),
     tournament_start: startMs !== null ? new Date(startMs).toISOString() : null,
     bracket_lock: (function(){ var m = getBracketLockMs(); return m !== null ? new Date(m).toISOString() : null; })(),
-    knockout_winners: (function(){ try { return JSON.parse(getConfig('knockout_winners') || '{}'); } catch (e) { return {}; } })()
+    knockout_winners: (function(){ try { return JSON.parse(getConfig('knockout_winners') || '{}'); } catch (e) { return {}; } })(),
+    knockout_dates: (function(){ try { return JSON.parse(getConfig('knockout_dates') || '{}'); } catch (e) { return {}; } })()
   };
 }
 

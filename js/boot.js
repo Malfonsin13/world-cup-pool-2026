@@ -10,10 +10,12 @@ Router.init();
 // Shows until NOTICE_UNTIL (24h window), unless the user dismisses it.
 (function () {
   const NOTICE_UNTIL = new Date('2026-06-28T19:00:00Z').getTime(); // first knockout kickoff (3 PM ET)
-  const NOTICE_TEXT = '🏆 Knockout bracket is filling in as groups finish — pick the matchups that are set! Complete your FULL bracket to the champion before Sunday, June 28 at 3 PM ET, when the first game kicks off and it locks. Don’t miss it! ⚽';
+  const NOTICE_TEXT = '⚠️ The bracket seeding was off — it’s now fixed. Your Round-of-32 picks are intact, but Round-of-16 and onward were reset — please re-pick them. Deadline is TODAY, Sunday June 28 at 3 PM ET, when the bracket locks. ⚽';
+  // Bumped key so this corrected notice re-appears even for anyone who dismissed the previous one.
+  const NOTICE_KEY = 'wcp_notice_reseed_20260628';
   const banner = document.getElementById('notice-banner');
   if (!banner) return;
-  if (Date.now() >= NOTICE_UNTIL || localStorage.getItem('wcp_notice_dismissed') === String(NOTICE_UNTIL)) return;
+  if (Date.now() >= NOTICE_UNTIL || localStorage.getItem(NOTICE_KEY) === String(NOTICE_UNTIL)) return;
 
   const track = document.getElementById('notice-track');
   // Duplicate the text so the marquee loops without a visible gap.
@@ -21,6 +23,6 @@ Router.init();
   banner.style.display = 'block';
   document.getElementById('notice-dismiss').addEventListener('click', function () {
     banner.style.display = 'none';
-    localStorage.setItem('wcp_notice_dismissed', String(NOTICE_UNTIL));
+    localStorage.setItem(NOTICE_KEY, String(NOTICE_UNTIL));
   });
 })();

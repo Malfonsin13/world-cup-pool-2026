@@ -33,8 +33,91 @@ function canonTeam(name) {
 // fixtures by team name, with a kickoff-time guard as a second safety net.
 
 var ESPN_WC_URL = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260611-20260719';
+var ESPN_STANDINGS_URL = 'https://site.api.espn.com/apis/v2/sports/soccer/fifa.world/standings';
 
 var KO_ROUND = { 'round-of-32': 'R32', 'round-of-16': 'R16', 'quarterfinals': 'QF', 'semifinals': 'SF', 'final': 'Final' };
+
+// Official 2026 FIFA bracket structure (fixed — independent of which teams qualify).
+// Each Round-of-32 slot ("Round of 32 N", which the R16+ feeds reference) is identified by the
+// GROUP WINNER in it; the four runner-up-vs-runner-up ties are identified by their group pair.
+// This is why seeding can't be inferred from kickoff date or ESPN id — it's set by group position.
+var R32_WINNER_SLOT = { E: 2, F: 3, C: 4, I: 5, A: 7, L: 8, D: 9, G: 10, H: 12, B: 13, J: 14, K: 15 };
+var R32_RUPAIR_SLOT = { 'A,B': 1, 'E,I': 6, 'K,L': 11, 'D,G': 16 };
+
+// Which prior-round slots feed each later-round slot (mirrors FEEDS in js/views/bracket.js).
+// Used only to attach kickoff dates to later-round cards.
+var BRACKET_FEEDS = {
+  R16: { 1: [1, 3], 2: [2, 5], 3: [4, 6], 4: [7, 8], 5: [11, 12], 6: [9, 10], 7: [14, 16], 8: [13, 15] },
+  QF:  { 1: [1, 2], 2: [5, 6], 3: [3, 4], 4: [7, 8] },
+  SF:  { 1: [1, 2], 2: [3, 4] },
+  Final: { 1: [1, 2] }
+};
+
+// team (canonical) -> { group:'A'..'L', rank:1..4 } from ESPN's group standings. null on failure.
+function fetchGroupStandings() {
+  try {
+    var resp = UrlFetchApp.fetch(ESPN_STANDINGS_URL, { muteHttpExceptions: true });
+    if (resp.getResponseCode() !== 200) return null;
+    var groups = (JSON.parse(resp.getContentText()) || {}).children;
+    if (!Array.isArray(groups)) return null;
+    var info = {};
+    groups.forEach(function(g) {
+      var letter = String(g.name || '').replace('Group ', '').trim();
+      var entries = (g.standings && g.standings.entries) || [];
+      entries.forEach(function(e) {
+        var rk = (e.stats || []).find(function(s) { return s.name === 'rank' || s.type === 'rank'; });
+        var nm = e.team && (e.team.displayName || e.team.name);
+        if (nm) info[canonTeam(nm)] = { group: letter, rank: rk ? Number(rk.value) : null };
+      });
+    });
+    return Object.keys(info).length ? info : null;
+  } catch (e) { return null; }
+}
+
+// Official R32 slot (1..16) for a matchup, derived from each team's group + finishing rank.
+// Returns null if either team is unknown (standings not final yet).
+function r32SlotForTeams(homeCanon, awayCanon, info) {
+  var hi = info[homeCanon], ai = info[awayCanon];
+  if (!hi || !ai) return null;
+  if (hi.rank === 1) return R32_WINNER_SLOT[hi.group] || null;
+  if (ai.rank === 1) return R32_WINNER_SLOT[ai.group] || null;
+  return R32_RUPAIR_SLOT[[hi.group, ai.group].sort().join(',')] || null; // runner-up vs runner-up
+}
+
+// Kickoff date per knockout slot for the bracket UI: { R32:{slot:iso}, R16:{...}, QF, SF, Final }.
+// R32 slots map by group position; later rounds map via each game's "Round of X N Winner"
+// placeholder. Merges onto the cached map so an already-resolved slot never loses its date.
+function buildKnockoutDates(events, info) {
+  var dates;
+  try { dates = JSON.parse(getConfig('knockout_dates') || '{}'); } catch (e) { dates = {}; }
+  ['R32', 'R16', 'QF', 'SF', 'Final'].forEach(function(r) { if (!dates[r]) dates[r] = {}; });
+
+  var slugRound = { 'round-of-16': 'R16', 'quarterfinals': 'QF', 'semifinals': 'SF', 'final': 'Final' };
+  function side(e, ha) { var c = e.competitions && e.competitions[0]; return c && c.competitors.find(function(x) { return x.homeAway === ha; }); }
+  function refNum(c) { var nm = (c && c.team && (c.team.displayName || c.team.name)) || ''; var m = String(nm).match(/(\d+)\s*Winner/i); return m ? Number(m[1]) : null; }
+  function feedSlot(round, a, b) {
+    var f = BRACKET_FEEDS[round]; if (!f) return null;
+    for (var k in f) { if ((f[k][0] === a && f[k][1] === b) || (f[k][0] === b && f[k][1] === a)) return Number(k); }
+    return null;
+  }
+
+  events.forEach(function(e) {
+    var slug = e.season && e.season.slug;
+    if (slug === 'round-of-32') {
+      var h = side(e, 'home'), a = side(e, 'away');
+      if (!h || !a || !h.team || !a.team) return;
+      var slot = r32SlotForTeams(canonTeam(h.team.displayName), canonTeam(a.team.displayName), info);
+      if (slot) dates.R32[slot] = e.date;
+      return;
+    }
+    var round = slugRound[slug];
+    if (!round) return;
+    if (round === 'Final') { dates.Final[1] = e.date; return; }
+    var an = refNum(side(e, 'home')), bn = refNum(side(e, 'away'));
+    if (an && bn) { var s = feedSlot(round, an, bn); if (s) dates[round][s] = e.date; }
+  });
+  return dates;
+}
 
 function autoFetchResults() {
   try {
@@ -95,27 +178,33 @@ function autoFetchResults() {
 }
 
 // Load Round-of-32 matchups from ESPN as they get decided (partial is fine — a slot whose
-// teams aren't set yet stays TBD). match_index = position in the date-sorted 16-game list
-// (stable, matches ESPN's "Round of 32 N" bracket numbering). Sets bracket_lock to the first
-// R32 kickoff. Idempotent.
+// teams aren't set yet stays TBD). match_index = the official "Round of 32 N" slot, derived
+// from group position (group winner / runner-up pair) via ESPN standings — NOT kickoff order,
+// which doesn't match FIFA's numbering. Sets bracket_lock to the first R32 kickoff. Idempotent.
 function autoFetchKnockoutBracket(events) {
   function real(n) { return n && !/Winner|Place|Round of/i.test(n); }
   function side(e, ha) { var c = e.competitions && e.competitions[0]; return c && c.competitors.find(function(x) { return x.homeAway === ha; }); }
 
-  var r32 = events.filter(function(e) { return (e.season && e.season.slug) === 'round-of-32'; })
-                  .sort(function(a, b) { return (new Date(a.date) - new Date(b.date)) || String(a.id).localeCompare(String(b.id)); });
+  var r32 = events.filter(function(e) { return (e.season && e.season.slug) === 'round-of-32'; });
   if (r32.length !== 16) return false;
 
+  var info = fetchGroupStandings();      // need group finishes to seed the slots correctly
+  if (!info) return false;
+
   var firstKick = null;
-  r32.forEach(function(e, i) {
+  r32.forEach(function(e) {
     var ko = new Date(e.date).getTime();
     if (!isNaN(ko) && (firstKick === null || ko < firstKick)) firstKick = ko;
     var h = side(e, 'home'), a = side(e, 'away');
     if (!h || !a || !h.team || !a.team) return;
     if (!real(h.team.displayName) || !real(a.team.displayName)) return; // not decided yet — leave TBD
-    upsertKnockoutFixture('R32', i + 1, canonTeam(h.team.displayName), canonTeam(a.team.displayName), '', '', e.date);
+    var hc = canonTeam(h.team.displayName), ac = canonTeam(a.team.displayName);
+    var slot = r32SlotForTeams(hc, ac, info);
+    if (!slot) return; // can't seed this game yet
+    upsertKnockoutFixture('R32', slot, hc, ac, '', '', e.date);
   });
   if (firstKick !== null) setConfig('bracket_lock', new Date(firstKick).toISOString());
+  setConfig('knockout_dates', JSON.stringify(buildKnockoutDates(events, info)));
   return true;
 }
 
@@ -535,6 +624,91 @@ function dedupeGroupPredictions() {
 
   rescoreAllFinalGroupGames();
   Logger.log('Rescored finished games and rebuilt the leaderboard.');
+}
+
+// ── One-off correction: re-seed the knockout bracket ──────────────────────────
+// The bracket was first loaded with R32 slots in kickoff order, but FIFA's "Round of 32 N"
+// numbering is set by group position — so the R16+ matchups were wrong. This rebuilds the R32
+// fixtures at their correct slots, MIGRATES each player's R32 pick to the slot now holding its
+// team (so their R32 picks are honored), DELETES every R16/QF/SF/Final pick (they were made
+// against the wrong seeding), then re-scores. Players re-fill the later rounds. Run ONCE.
+function fixBracketSeeding() { reseedKnockoutBracket(); }
+
+function reseedKnockoutBracket() {
+  var events;
+  try {
+    var resp = UrlFetchApp.fetch(ESPN_WC_URL, { muteHttpExceptions: true });
+    if (resp.getResponseCode() !== 200) { Logger.log('reseed: ESPN HTTP ' + resp.getResponseCode()); return; }
+    events = (JSON.parse(resp.getContentText()) || {}).events || [];
+  } catch (e) { Logger.log('reseed: ESPN fetch failed — ' + e.message); return; }
+
+  var info = fetchGroupStandings();
+  if (!info) { Logger.log('reseed: standings unavailable — aborting'); return; }
+
+  function real(n) { return n && !/Winner|Place|Round of/i.test(n); }
+  function side(e, ha) { var c = e.competitions && e.competitions[0]; return c && c.competitors.find(function(x) { return x.homeAway === ha; }); }
+
+  // 1. Correct R32 matchups by slot, and a team -> slot map for migrating picks.
+  var slotGames = {}, teamSlot = {};
+  events.filter(function(e) { return (e.season && e.season.slug) === 'round-of-32'; }).forEach(function(e) {
+    var h = side(e, 'home'), a = side(e, 'away');
+    if (!h || !a || !h.team || !a.team) return;
+    if (!real(h.team.displayName) || !real(a.team.displayName)) return;
+    var hc = canonTeam(h.team.displayName), ac = canonTeam(a.team.displayName);
+    var slot = r32SlotForTeams(hc, ac, info);
+    if (!slot) return;
+    slotGames[slot] = { home: hc, away: ac, utc: e.date };
+    teamSlot[hc] = slot; teamSlot[ac] = slot;
+  });
+  if (Object.keys(slotGames).length !== 16) {
+    Logger.log('reseed: only ' + Object.keys(slotGames).length + '/16 R32 slots resolved — aborting to avoid a partial reseed');
+    return;
+  }
+
+  // 2. Delete every existing knockout fixture (wrong date-order R32 + any later rounds).
+  var fs = sheet('Fixtures');
+  var fdata = fs.getDataRange().getValues();
+  var phaseCol = fdata[0].indexOf('phase');
+  var delRows = [];
+  for (var i = 1; i < fdata.length; i++) { if (fdata[i][phaseCol] === 'knockout') delRows.push(i + 1); }
+  delRows.sort(function(a, b) { return b - a; }).forEach(function(r) { fs.deleteRow(r); });
+  Logger.log('reseed: deleted ' + delRows.length + ' knockout fixtures');
+
+  // 3. Re-create the 16 R32 fixtures at the correct slots.
+  Object.keys(slotGames).map(Number).sort(function(a, b) { return a - b; }).forEach(function(slot) {
+    var g = slotGames[slot];
+    upsertKnockoutFixture('R32', slot, g.home, g.away, '', '', g.utc);
+  });
+
+  // 4. Migrate R32 picks to the slot now holding their team; delete all R16/QF/SF/Final picks.
+  var bp = sheet('BracketPredictions');
+  var bdata = bp.getDataRange().getValues();
+  var bh = bdata[0];
+  var bRound = bh.indexOf('round'), bIdx = bh.indexOf('match_index'), bPick = bh.indexOf('team_picked');
+  var migrated = 0, deletePicks = [];
+  for (var k = 1; k < bdata.length; k++) {
+    var round = bdata[k][bRound];
+    if (round === 'R32') {
+      var newSlot = teamSlot[canonTeam(bdata[k][bPick])];
+      if (newSlot && String(bdata[k][bIdx]) !== String(newSlot)) { bp.getRange(k + 1, bIdx + 1).setValue(newSlot); migrated++; }
+    } else if (round === 'R16' || round === 'QF' || round === 'SF' || round === 'Final') {
+      deletePicks.push(k + 1);
+    }
+  }
+  deletePicks.sort(function(a, b) { return b - a; }).forEach(function(r) { bp.deleteRow(r); });
+  Logger.log('reseed: migrated ' + migrated + ' R32 picks, deleted ' + deletePicks.length + ' R16+ picks');
+
+  // 5. Cache dates + lock, re-score by advancement, rebuild leaderboard.
+  setConfig('knockout_dates', JSON.stringify(buildKnockoutDates(events, info)));
+  var firstKick = null;
+  Object.keys(slotGames).forEach(function(s) { var t = new Date(slotGames[s].utc).getTime(); if (!isNaN(t) && (firstKick === null || t < firstKick)) firstKick = t; });
+  if (firstKick !== null) setConfig('bracket_lock', new Date(firstKick).toISOString());
+
+  var winners = getKnockoutWinnersByRound(events);
+  setConfig('knockout_winners', JSON.stringify(winners));
+  scoreBracketByAdvancement(winners);
+  rebuildLeaderboard();
+  Logger.log('reseed: done — bracket re-seeded, R32 picks migrated, leaderboard rebuilt');
 }
 
 // ── Time Trigger Setup ────────────────────────────────────────────────────────

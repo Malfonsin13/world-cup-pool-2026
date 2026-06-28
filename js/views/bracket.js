@@ -15,6 +15,15 @@ Router.register('bracket', async function (container) {
   const lockMs = configData.bracket_lock ? new Date(configData.bracket_lock).getTime() : null;
   const bracketLocked = lockMs !== null && (Date.now() - offset) >= lockMs;
   const winners = configData.knockout_winners || {};
+  const koDates = configData.knockout_dates || {};   // { R32:{slot:iso}, R16:{...}, ... }
+
+  // Compact kickoff for a bracket card (e.g. "Jul 4, 1:00 PM EDT"), '' if no date.
+  function kickoffShort(utc) {
+    if (!utc) return '';
+    const d = new Date(utc);
+    if (isNaN(d)) return '';
+    return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+  }
 
   // R32 matchups from our knockout fixtures (auto-loaded from ESPN, possibly partial)
   const r32 = {}; // match_index -> { home, away }
@@ -87,7 +96,9 @@ Router.register('bracket', async function (container) {
           ${teamFlag(team)}<span class="bs-name">${team}</span>${won ? `<span class="bs-pts">${pts}pts</span>` : ''}
         </button>`;
     }
-    return `<div class="b-card" data-round="${round}" data-idx="${idx}">${slot(cands[0])}${slot(cands[1])}</div>`;
+    const when = kickoffShort(koDates[round] && koDates[round][idx]);
+    const dateHTML = when ? `<div class="b-card-date">${when}</div>` : '';
+    return `<div class="b-card" data-round="${round}" data-idx="${idx}">${dateHTML}${slot(cands[0])}${slot(cands[1])}</div>`;
   }
 
   function buildRoundCol(round, slots, side) {
