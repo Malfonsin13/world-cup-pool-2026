@@ -9,10 +9,10 @@ Router.init();
 // ── Temporary site notice (rolling red banner) ────────────────────────────────
 // Shows until NOTICE_UNTIL (24h window), unless the user dismisses it.
 (function () {
-  const NOTICE_UNTIL = new Date('2026-06-28T19:00:00Z').getTime(); // first knockout kickoff (3 PM ET)
-  const NOTICE_TEXT = '⚠️ The bracket seeding was off — it’s now fixed. Your Round-of-32 picks are intact, but Round-of-16 and onward were reset — please re-pick them. Deadline is TODAY, Sunday June 28 at 3 PM ET, when the bracket locks. ⚽';
-  // Bumped key so this corrected notice re-appears even for anyone who dismissed the previous one.
-  const NOTICE_KEY = 'wcp_notice_reseed_20260628';
+  const NOTICE_UNTIL = new Date('2026-06-30T14:00:00Z').getTime(); // 24h from deploy
+  const NOTICE_TEXT = '👋 Friendly reminder: if you haven’t paid your buy-in yet, head to the Rules tab for payment options (Cash App / Venmo / Zelle), or reach out to Ben or Marcelo. We need everyone in to pay out the full pot once the World Cup wraps up! 💰';
+  // Bumped key so this notice re-appears even for anyone who dismissed the previous one.
+  const NOTICE_KEY = 'wcp_notice_payment_20260629';
   const banner = document.getElementById('notice-banner');
   if (!banner) return;
   if (Date.now() >= NOTICE_UNTIL || localStorage.getItem(NOTICE_KEY) === String(NOTICE_UNTIL)) return;
