@@ -712,31 +712,24 @@ function reseedKnockoutBracket() {
 }
 
 // ── One-off correction: restore bracket picks that failed to save ─────────────
-// A few users' later-round (and in one case full) bracket picks never saved before the lock.
-// This writes them directly (bypassing the lock — authorized admin correction). Scoring is by
-// team advancement, so match_index only affects display; the derivations below map each named
-// team to its unique slot via the FEEDS topology (see js/views/bracket.js) and are internally
-// consistent (every round's winner comes from the two slots that feed it).
+// Some users' bracket picks never saved before the lock. This writes them directly (bypassing
+// the lock — authorized admin correction). Scoring is by team advancement, so match_index only
+// affects display; picks map each named team to its unique slot via the FEEDS topology.
 //
-// Run ONCE: select `fixMissingBracketPicks` in the editor and press Run. Idempotent — safe to
-// re-run (updates existing rows in place), so running it again after the earlier BUSH-only fix
-// is fine.
+// THE BIG BUSH was already corrected separately — he is NOT touched here.
+// Susana provided screenshots → we restore her FULL bracket verbatim.
+// Flowers21 gave only his later-round winners (no screenshots) → those are only valid if his
+// ALREADY-RECORDED R32 picks actually put those teams through. We VALIDATE each claimed R16
+// winner against his stored R32 pick and refuse to write if anything conflicts (e.g. he says
+// Morocco wins the R16 but his R32 slot-3 pick was Netherlands).
+//
+// Run `fixMissingBracketPicks` to apply. Run `checkFlowersBracket` first if you just want the
+// read-only consistency report for Flowers21 without writing anything. Idempotent.
 
 // Upsert a list of {round, match_index, team_picked} for the first user whose display_name
 // contains nameSubstr (case-insensitive). No scoring/rebuild here — the caller does it once.
-function _applyBracketPicks(nameSubstr, picks) {
-  var key = String(nameSubstr).toUpperCase();
-  var matches = sheetToObjects('Users').filter(function(u) {
-    return String(u.display_name || '').toUpperCase().indexOf(key) >= 0;
-  });
-  if (!matches.length) { Logger.log('_applyBracketPicks: no user matching "' + nameSubstr + '"'); return; }
-  if (matches.length > 1) {
-    Logger.log('_applyBracketPicks: WARNING multiple users match "' + nameSubstr + '": ' +
-      matches.map(function(m) { return m.display_name; }).join(', ') + ' — using the first');
-  }
-  var target = matches[0];
+function _applyBracketPicks(target, picks) {
   Logger.log('_applyBracketPicks: ' + target.display_name + ' (id=' + target.id + ') — ' + picks.length + ' picks');
-
   var s = sheet('BracketPredictions');
   var data = s.getDataRange().getValues();
   var headers = data[0];
@@ -767,19 +760,42 @@ function _applyBracketPicks(nameSubstr, picks) {
   });
 }
 
-// THE BIG BUSH — only these four later-round picks didn't save (R32 was fine).
-//   R16 7 Argentina (beat Australia) · R16 8 Switzerland (beat Colombia)
-//   QF 4 Argentina (beat Switzerland) · SF 2 Argentina (beat England, who was already his QF 3)
-function _bushPicks() {
-  return [
-    { round: 'R16', match_index: 7, team_picked: 'Argentina' },
-    { round: 'R16', match_index: 8, team_picked: 'Switzerland' },
-    { round: 'QF',  match_index: 4, team_picked: 'Argentina' },
-    { round: 'SF',  match_index: 2, team_picked: 'Argentina' }
-  ];
+// First user whose display_name contains nameSubstr (case-insensitive), or null.
+function _findUser(nameSubstr) {
+  var key = String(nameSubstr).toUpperCase();
+  var matches = sheetToObjects('Users').filter(function(u) {
+    return String(u.display_name || '').toUpperCase().indexOf(key) >= 0;
+  });
+  if (!matches.length) { Logger.log('no user matching "' + nameSubstr + '"'); return null; }
+  if (matches.length > 1) {
+    Logger.log('WARNING multiple users match "' + nameSubstr + '": ' +
+      matches.map(function(m) { return m.display_name; }).join(', ') + ' — using the first');
+  }
+  return matches[0];
 }
 
-// Flowers21 — later rounds only (his R32 was fine). From his stated winners.
+// canonTeam -> R32 match_index, read from the (reseeded) knockout fixtures. Each team is in one game.
+function _r32SlotByTeam() {
+  var map = {};
+  sheetToObjects('Fixtures').forEach(function(f) {
+    if (f.phase === 'knockout' && f.round === 'R32') {
+      if (f.home) map[canonTeam(f.home)] = Number(f.match_index);
+      if (f.away) map[canonTeam(f.away)] = Number(f.match_index);
+    }
+  });
+  return map;
+}
+
+// A user's recorded picks for one round, as { match_index -> team }.
+function _userRoundPicks(userId, round) {
+  var out = {};
+  sheetToObjects('BracketPredictions').forEach(function(r) {
+    if (String(r.user_id) === String(userId) && r.round === round) out[Number(r.match_index)] = r.team_picked;
+  });
+  return out;
+}
+
+// Flowers21's stated winners (no screenshots — validated against his recorded R32 before writing).
 //   R16: Morocco(1) France(2) Brazil(3) Mexico(4) Spain(5) USA(6) Argentina(7) Colombia(8)
 //   QF: France(1) USA(2) Mexico(3) Argentina(4) · SF: France(1) Mexico(2) · Final: France
 function _flowersPicks() {
@@ -802,6 +818,43 @@ function _flowersPicks() {
   ];
 }
 
+// Checks each claimed R16 winner against Flowers21's ALREADY-RECORDED R32 pick: for team T to win
+// its R16, his R32 pick in T's game must be T. Returns { ok, mismatches[], user }. Logs the report.
+function _validateFlowersR32() {
+  var user = _findUser('Flowers21');
+  if (!user) return { ok: false, mismatches: ['user not found'], user: null };
+
+  var slotByTeam = _r32SlotByTeam();
+  var hisR32 = _userRoundPicks(user.id, 'R32'); // slot -> his recorded winner
+  var mismatches = [];
+
+  _flowersPicks().filter(function(p) { return p.round === 'R16'; }).forEach(function(p) {
+    var team = p.team_picked;
+    var slot = slotByTeam[canonTeam(team)];
+    var his = slot ? hisR32[slot] : undefined;
+    var okSlot = slot && canonTeam(his || '') === canonTeam(team);
+    Logger.log('  R16 ' + p.match_index + ' claims ' + team + ' → needs R32 slot ' + slot + ' = ' + team +
+      '; recorded R32 slot ' + slot + ' = "' + (his || '(none)') + '"  ' + (okSlot ? 'OK' : '✗ CONFLICT'));
+    if (!okSlot) {
+      mismatches.push('R16 ' + p.match_index + ': ' + team + ' can\'t advance — his R32 slot ' + slot +
+        ' pick is "' + (his || '(none)') + '", not ' + team);
+    }
+  });
+  return { ok: mismatches.length === 0, mismatches: mismatches, user: user };
+}
+
+// READ-ONLY: report whether Flowers21's recorded R32 picks support his claimed R16 winners.
+function checkFlowersBracket() {
+  Logger.log('Checking Flowers21 R16 claims against his recorded R32 picks…');
+  var v = _validateFlowersR32();
+  if (!v.user) { Logger.log('Flowers21 not found.'); return; }
+  if (v.ok) Logger.log('RESULT: ✓ consistent — safe to write his later-round picks.');
+  else {
+    Logger.log('RESULT: ✗ ' + v.mismatches.length + ' conflict(s) — do NOT write; go back to Flowers21:');
+    v.mismatches.forEach(function(m) { Logger.log('   - ' + m); });
+  }
+}
+
 // Susana — full bracket (none of her picks saved). Decoded from her screenshots; every R16 card's
 // two teams confirm the feeding R32 winners, and each later round's winner comes from its feeds.
 //   R32: 1 Canada 2 Germany 3 Netherlands 4 Brazil 5 France 6 Norway 7 Mexico 8 England
@@ -820,14 +873,26 @@ function _susanaPicks() {
   return out;
 }
 
-// Run this ONE function from the editor to fix all three users at once.
+// Run this ONE function from the editor. Restores Susana's full bracket, and Flowers21's later
+// rounds ONLY IF his recorded R32 picks support them (otherwise it skips him and logs the conflict).
 function fixMissingBracketPicks() {
-  _applyBracketPicks('BUSH', _bushPicks());
-  _applyBracketPicks('Flowers21', _flowersPicks());
-  _applyBracketPicks('Susana', _susanaPicks());
+  // Susana — full bracket from screenshots.
+  var susana = _findUser('Susana');
+  if (susana) _applyBracketPicks(susana, _susanaPicks());
+
+  // Flowers21 — validate against his recorded R32 first.
+  var v = _validateFlowersR32();
+  if (v.user && v.ok) {
+    _applyBracketPicks(v.user, _flowersPicks());
+  } else if (v.user) {
+    Logger.log('Flowers21 SKIPPED — his R16 claims conflict with his recorded R32 picks:');
+    v.mismatches.forEach(function(m) { Logger.log('   - ' + m); });
+  }
+
   scoreBracketByAdvancement();
   rebuildLeaderboard();
-  Logger.log('fixMissingBracketPicks: done — all three users applied, bracket re-scored, leaderboard rebuilt');
+  Logger.log('fixMissingBracketPicks: done' +
+    (v.user && !v.ok ? ' — NOTE: Flowers21 was skipped (see conflicts above); reconcile his R32 picks with him.' : ''));
 }
 
 // ── Time Trigger Setup ────────────────────────────────────────────────────────
