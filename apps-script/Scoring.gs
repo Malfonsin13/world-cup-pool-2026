@@ -711,6 +711,125 @@ function reseedKnockoutBracket() {
   Logger.log('reseed: done — bracket re-seeded, R32 picks migrated, leaderboard rebuilt');
 }
 
+// ── One-off correction: restore bracket picks that failed to save ─────────────
+// A few users' later-round (and in one case full) bracket picks never saved before the lock.
+// This writes them directly (bypassing the lock — authorized admin correction). Scoring is by
+// team advancement, so match_index only affects display; the derivations below map each named
+// team to its unique slot via the FEEDS topology (see js/views/bracket.js) and are internally
+// consistent (every round's winner comes from the two slots that feed it).
+//
+// Run ONCE: select `fixMissingBracketPicks` in the editor and press Run. Idempotent — safe to
+// re-run (updates existing rows in place), so running it again after the earlier BUSH-only fix
+// is fine.
+
+// Upsert a list of {round, match_index, team_picked} for the first user whose display_name
+// contains nameSubstr (case-insensitive). No scoring/rebuild here — the caller does it once.
+function _applyBracketPicks(nameSubstr, picks) {
+  var key = String(nameSubstr).toUpperCase();
+  var matches = sheetToObjects('Users').filter(function(u) {
+    return String(u.display_name || '').toUpperCase().indexOf(key) >= 0;
+  });
+  if (!matches.length) { Logger.log('_applyBracketPicks: no user matching "' + nameSubstr + '"'); return; }
+  if (matches.length > 1) {
+    Logger.log('_applyBracketPicks: WARNING multiple users match "' + nameSubstr + '": ' +
+      matches.map(function(m) { return m.display_name; }).join(', ') + ' — using the first');
+  }
+  var target = matches[0];
+  Logger.log('_applyBracketPicks: ' + target.display_name + ' (id=' + target.id + ') — ' + picks.length + ' picks');
+
+  var s = sheet('BracketPredictions');
+  var data = s.getDataRange().getValues();
+  var headers = data[0];
+  var userCol  = headers.indexOf('user_id');
+  var roundCol = headers.indexOf('round');
+  var idxCol   = headers.indexOf('match_index');
+  var pickCol  = headers.indexOf('team_picked');
+  var ptsCol   = headers.indexOf('pts_awarded');
+  var updCol   = headers.indexOf('updated_at');
+  var now = new Date().toISOString();
+
+  picks.forEach(function(p) {
+    var existingRow = -1;
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][userCol]) === String(target.id) &&
+          data[i][roundCol] === p.round &&
+          String(data[i][idxCol]) === String(p.match_index)) { existingRow = i + 1; break; }
+    }
+    if (existingRow > 0) {
+      s.getRange(existingRow, pickCol + 1).setValue(p.team_picked);
+      s.getRange(existingRow, ptsCol + 1).setValue(0);
+      s.getRange(existingRow, updCol + 1).setValue(now);
+      Logger.log('  updated ' + p.round + '_' + p.match_index + ' → ' + p.team_picked);
+    } else {
+      s.appendRow([target.id, p.round, p.match_index, p.team_picked, '', 0, now]);
+      Logger.log('  inserted ' + p.round + '_' + p.match_index + ' → ' + p.team_picked);
+    }
+  });
+}
+
+// THE BIG BUSH — only these four later-round picks didn't save (R32 was fine).
+//   R16 7 Argentina (beat Australia) · R16 8 Switzerland (beat Colombia)
+//   QF 4 Argentina (beat Switzerland) · SF 2 Argentina (beat England, who was already his QF 3)
+function _bushPicks() {
+  return [
+    { round: 'R16', match_index: 7, team_picked: 'Argentina' },
+    { round: 'R16', match_index: 8, team_picked: 'Switzerland' },
+    { round: 'QF',  match_index: 4, team_picked: 'Argentina' },
+    { round: 'SF',  match_index: 2, team_picked: 'Argentina' }
+  ];
+}
+
+// Flowers21 — later rounds only (his R32 was fine). From his stated winners.
+//   R16: Morocco(1) France(2) Brazil(3) Mexico(4) Spain(5) USA(6) Argentina(7) Colombia(8)
+//   QF: France(1) USA(2) Mexico(3) Argentina(4) · SF: France(1) Mexico(2) · Final: France
+function _flowersPicks() {
+  return [
+    { round: 'R16', match_index: 1, team_picked: 'Morocco' },
+    { round: 'R16', match_index: 2, team_picked: 'France' },
+    { round: 'R16', match_index: 3, team_picked: 'Brazil' },
+    { round: 'R16', match_index: 4, team_picked: 'Mexico' },
+    { round: 'R16', match_index: 5, team_picked: 'Spain' },
+    { round: 'R16', match_index: 6, team_picked: 'USA' },
+    { round: 'R16', match_index: 7, team_picked: 'Argentina' },
+    { round: 'R16', match_index: 8, team_picked: 'Colombia' },
+    { round: 'QF', match_index: 1, team_picked: 'France' },
+    { round: 'QF', match_index: 2, team_picked: 'USA' },
+    { round: 'QF', match_index: 3, team_picked: 'Mexico' },
+    { round: 'QF', match_index: 4, team_picked: 'Argentina' },
+    { round: 'SF', match_index: 1, team_picked: 'France' },
+    { round: 'SF', match_index: 2, team_picked: 'Mexico' },
+    { round: 'Final', match_index: 1, team_picked: 'France' }
+  ];
+}
+
+// Susana — full bracket (none of her picks saved). Decoded from her screenshots; every R16 card's
+// two teams confirm the feeding R32 winners, and each later round's winner comes from its feeds.
+//   R32: 1 Canada 2 Germany 3 Netherlands 4 Brazil 5 France 6 Norway 7 Mexico 8 England
+//        9 USA 10 Belgium 11 Portugal 12 Spain 13 Switzerland 14 Argentina 15 Colombia 16 Australia
+//   R16: 1 Netherlands 2 France 3 Brazil 4 Mexico 5 Portugal 6 USA 7 Argentina 8 Colombia
+//   QF: 1 France 2 Portugal 3 Brazil 4 Argentina · SF: 1 France 2 Argentina · Final: France
+function _susanaPicks() {
+  var r32 = ['Canada','Germany','Netherlands','Brazil','France','Norway','Mexico','England',
+             'USA','Belgium','Portugal','Spain','Switzerland','Argentina','Colombia','Australia'];
+  var out = r32.map(function(t, i) { return { round: 'R32', match_index: i + 1, team_picked: t }; });
+  var r16 = ['Netherlands','France','Brazil','Mexico','Portugal','USA','Argentina','Colombia'];
+  r16.forEach(function(t, i) { out.push({ round: 'R16', match_index: i + 1, team_picked: t }); });
+  ['France','Portugal','Brazil','Argentina'].forEach(function(t, i) { out.push({ round: 'QF', match_index: i + 1, team_picked: t }); });
+  ['France','Argentina'].forEach(function(t, i) { out.push({ round: 'SF', match_index: i + 1, team_picked: t }); });
+  out.push({ round: 'Final', match_index: 1, team_picked: 'France' });
+  return out;
+}
+
+// Run this ONE function from the editor to fix all three users at once.
+function fixMissingBracketPicks() {
+  _applyBracketPicks('BUSH', _bushPicks());
+  _applyBracketPicks('Flowers21', _flowersPicks());
+  _applyBracketPicks('Susana', _susanaPicks());
+  scoreBracketByAdvancement();
+  rebuildLeaderboard();
+  Logger.log('fixMissingBracketPicks: done — all three users applied, bracket re-scored, leaderboard rebuilt');
+}
+
 // ── Time Trigger Setup ────────────────────────────────────────────────────────
 // Run this function ONCE manually in the Apps Script editor to set up the trigger.
 
