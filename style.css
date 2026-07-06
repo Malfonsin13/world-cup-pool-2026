@@ -922,19 +922,36 @@ body {
 .bs:only-child  { border-radius: 6px; border-bottom: 1px solid var(--border); }
 
 .bs:not([disabled]):hover { background: #f0fdf4; border-color: var(--green); z-index: 1; }
-.bs.bs-pick   { background: #dcfce7; border-color: var(--green); }
-.bs.bs-win    { background: #fef9c3; border-color: var(--gold); font-weight: 700; }
+.bs.bs-pick    { background: #dcfce7; border-color: var(--green); }
+.bs.bs-correct { background: #dcfce7; border-color: var(--green); font-weight: 700; } /* your correct pick */
+.bs.bs-win     { background: #fef9c3; border-color: var(--gold); font-weight: 700; }  /* winner you didn't pick */
 .bs.bs-lock   { cursor: default; }
 .bs[disabled] { cursor: default; opacity: .7; }
+.bs.bs-miss   { opacity: .45; }                 /* your pick that lost — after [disabled] so it wins */
+.bs.bs-miss .bs-name { text-decoration: line-through; }
 .bs-tbd       { color: var(--muted); font-style: italic; font-weight: 400; }
 
 .bs-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Earned-points chip — ONLY on your correct picks (green = you scored). */
 .bs-pts  {
   font-size: 0.65rem;
-  background: var(--gold);
-  color: #1e1e1e;
+  background: var(--green);
+  color: #fff;
   border-radius: 4px;
   padding: 1px 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-weight: 700;
+}
+/* Muted marker on a team that won its game but you didn't pick — not a points award. */
+.bs-won-tag {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 4px;
   white-space: nowrap;
   flex-shrink: 0;
 }

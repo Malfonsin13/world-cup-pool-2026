@@ -84,16 +84,33 @@ Router.register('bracket', async function (container) {
     const roundWinners = winners[round] || null;
     const bothKnown = cands[0] && cands[1];
 
+    // A card's matchup is "decided" once either shown team has won this round.
+    const decided = cands.some(t => roundWinners && roundWinners[t]);
+
     function slot(team) {
       if (!team) return `<div class="bs bs-tbd">TBD</div>`;
-      const picked = myPick === team;
-      const won = roundWinners && roundWinners[team];
+      const picked  = myPick === team;
+      const won     = !!(roundWinners && roundWinners[team]); // this team actually won its round
+      const correct = picked && won;        // the ONLY case that earns you points
+      const miss    = picked && !won && decided; // your pick lost this matchup
       const disabled = DEMO || bracketLocked || !bothKnown;
       const pts = (PTS[round] || 0) + (round === 'Final' ? CONFIG.SCORING.champion_bonus : 0);
+
+      const cls = ['bs'];
+      if (correct) cls.push('bs-correct');    // your correct pick (green, earns pts)
+      else if (won) cls.push('bs-win');       // a winner you didn't pick (gold, no pts)
+      else if (picked) cls.push('bs-pick');   // your pick, still undecided
+      if (miss) cls.push('bs-miss');          // your pick that lost (dimmed)
+      if (bracketLocked) cls.push('bs-lock');
+
+      // Points badge appears ONLY on your correct picks. A winner you didn't pick just gets a
+      // muted "winner" tag so results stay visible without implying you scored.
+      const tag = correct ? `<span class="bs-pts">✓ ${pts} pts</span>`
+                : (won ? `<span class="bs-won-tag">winner</span>` : '');
       return `
-        <button class="bs ${picked ? 'bs-pick' : ''} ${won ? 'bs-win' : ''} ${bracketLocked ? 'bs-lock' : ''}"
+        <button class="${cls.join(' ')}"
                 data-team="${team}" data-round="${round}" data-idx="${idx}" ${disabled ? 'disabled' : ''}>
-          ${teamFlag(team)}<span class="bs-name">${team}</span>${won ? `<span class="bs-pts">${pts}pts</span>` : ''}
+          ${teamFlag(team)}<span class="bs-name">${team}</span>${tag}
         </button>`;
     }
     const when = kickoffShort(koDates[round] && koDates[round][idx]);
