@@ -231,8 +231,10 @@ function handleGetLeaderboard() {
 
   var paidCount   = users.filter(function(u) { return u.has_paid == true || u.has_paid === 'TRUE'; }).length;
   var playerCount = users.length;
-  // PROJECTED pool — based on everyone who joined, paid or not, so people see the upside.
-  var pool = playerCount * buyIn;
+  // Before the tournament ends: PROJECTED pool (everyone who joined) so people see the upside.
+  // Once finalized: the ACTUAL pool is paid players only — that's what gets paid out.
+  var complete = getConfig('tournament_status') === 'complete';
+  var pool = (complete ? paidCount : playerCount) * buyIn;
 
   return {
     leaderboard: board,
@@ -258,7 +260,8 @@ function handleGetConfig() {
     tournament_start: startMs !== null ? new Date(startMs).toISOString() : null,
     bracket_lock: (function(){ var m = getBracketLockMs(); return m !== null ? new Date(m).toISOString() : null; })(),
     knockout_winners: (function(){ try { return JSON.parse(getConfig('knockout_winners') || '{}'); } catch (e) { return {}; } })(),
-    knockout_dates: (function(){ try { return JSON.parse(getConfig('knockout_dates') || '{}'); } catch (e) { return {}; } })()
+    knockout_dates: (function(){ try { return JSON.parse(getConfig('knockout_dates') || '{}'); } catch (e) { return {}; } })(),
+    final_ribbon: getConfig('final_ribbon') || null
   };
 }
 

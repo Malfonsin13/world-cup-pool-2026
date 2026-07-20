@@ -121,6 +121,9 @@ function buildKnockoutDates(events, info) {
 
 function autoFetchResults() {
   try {
+    // Once the tournament is finalized, results (incl. the manually-corrected SF/Final and
+    // penalty-decided games) are locked — don't let a late ESPN poll overwrite them.
+    if (getConfig('tournament_status') === 'complete') { Logger.log('autoFetchResults: tournament complete — skipping'); return; }
     var response = UrlFetchApp.fetch(ESPN_WC_URL, { muteHttpExceptions: true });
     if (response.getResponseCode() !== 200) {
       Logger.log('Auto-fetch failed: HTTP ' + response.getResponseCode());
@@ -486,6 +489,24 @@ function recalculateBracketScores(round, matchIndex, winner) {
 
 function norm(v) { return String(v == null ? '' : v).trim().toLowerCase(); }
 
+// Tolerant match for free-text award picks: accent- and case-insensitive, punctuation-stripped,
+// and matches when one name's words are all contained in the other (so "Mbappe", "Kylian Mbappe",
+// and "Mbappé" all match, and "Simon" matches "Unai Simon"). Team picks stay exact.
+function nameMatch(a, b) {
+  function base(s) {
+    var d = String(s == null ? '' : s).normalize('NFD');
+    var out = '';
+    for (var i = 0; i < d.length; i++) { var c = d.charCodeAt(i); if (c < 0x300 || c > 0x36f) out += d[i]; }
+    return out.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+  var A = base(a), B = base(b);
+  if (!A || !B) return false;
+  if (A === B) return true;
+  var ta = A.split(' '), tb = B.split(' ');
+  var short = ta.length <= tb.length ? ta : tb, long = ta.length <= tb.length ? tb : ta;
+  return short.every(function(t) { return long.indexOf(t) >= 0; });
+}
+
 function scoreMacroPicks(answers) {
   var macros  = sheetToObjects('MacroPicks');
   var s       = sheet('MacroPicks');
@@ -510,7 +531,7 @@ function scoreMacroPicks(answers) {
     });
     playerFields.forEach(function(f) {
       if (!answers[f]) return;
-      s.getRange(sheetRow, cols[f]).setValue(norm(row[f]) === norm(answers[f]) ? MACRO_PTS[f] : 0);
+      s.getRange(sheetRow, cols[f]).setValue(nameMatch(row[f], answers[f]) ? MACRO_PTS[f] : 0);
     });
   });
 
@@ -893,6 +914,169 @@ function fixMissingBracketPicks() {
   rebuildLeaderboard();
   Logger.log('fixMissingBracketPicks: done' +
     (v.user && !v.ok ? ' — NOTE: Flowers21 was skipped (see conflicts above); reconcile his R32 picks with him.' : ''));
+}
+
+// ── Tournament finalization ───────────────────────────────────────────────────
+// ESPN's feed stopped at the QF and reported 4 penalty-decided games as draws, so the auto-scorer
+// never credited the SF/Final/champion or those penalty advancers. These are the COMPLETE, correct
+// knockout results (teams that ADVANCED each round), reconstructed from ESPN's bracket + the final
+// standings (champion Spain, runner-up Argentina, 3rd England).
+function finalKnockoutWinners() {
+  var W = {
+    R32: ['Canada','Paraguay','Morocco','Brazil','France','Norway','Mexico','England',
+          'USA','Belgium','Portugal','Spain','Switzerland','Argentina','Colombia','Egypt'],
+    R16: ['Morocco','France','Norway','England','Spain','Belgium','Argentina','Switzerland'],
+    QF:  ['France','Spain','England','Argentina'],
+    SF:  ['Spain','Argentina'],
+    Final: ['Spain']
+  };
+  var out = {};
+  Object.keys(W).forEach(function(r) { out[r] = {}; W[r].forEach(function(t) { out[r][canonTeam(t)] = true; }); });
+  return out;
+}
+
+function _finalMacroAnswers() {
+  return { runner_up: 'Argentina', third_place: 'England',
+           golden_ball: 'Rodri', golden_boot: 'Kylian Mbappe', golden_glove: 'Unai Simon' };
+}
+
+var PRIZE_SPLIT = { first: 0.60, second: 0.25, group: 0.15 };
+
+// Compute the whole final picture IN MEMORY (no writes): every user's corrected bracket/macro/group
+// points, the ranked board (same tiebreakers as handleGetLeaderboard), the paid-only prize winners,
+// the pool/prizes, and a ready-to-use ribbon string. Used by both preview and commit.
+function _computeFinalStandings() {
+  var winners = finalKnockoutWinners();
+  var answers = _finalMacroAnswers();
+  var buyIn = Number(getConfig('buy_in')) || 20;
+
+  var users = sheetToObjects('Users');
+  var isPaid = function(u) { return u.has_paid === true || u.has_paid === 'TRUE' || u.has_paid === 'true'; };
+
+  // Group points, exact-score count, earliest submit — from raw GroupPredictions.
+  var gp = {}, exact = {}, earliest = {};
+  sheetToObjects('GroupPredictions').forEach(function(p) {
+    var uid = String(p.user_id), pts = Number(p.pts_awarded);
+    if (!isNaN(pts) && p.pts_awarded !== '') gp[uid] = (gp[uid] || 0) + pts;
+    if (pts === 5) exact[uid] = (exact[uid] || 0) + 1;
+    if (p.updated_at) { var t = new Date(p.updated_at).getTime(); if (!isNaN(t) && (earliest[uid] === undefined || t < earliest[uid])) earliest[uid] = t; }
+  });
+
+  // Bracket points from picks + the corrected winners (advancement scoring).
+  var bp = {};
+  sheetToObjects('BracketPredictions').forEach(function(r) {
+    if (!r.team_picked) return;
+    var uid = String(r.user_id), rd = r.round;
+    if (winners[rd] && winners[rd][canonTeam(r.team_picked)]) {
+      bp[uid] = (bp[uid] || 0) + (BRACKET_PTS[rd] || 0) + (rd === 'Final' ? CHAMPION_BONUS : 0);
+    }
+  });
+
+  // Macro points + a per-user log of what matched (for review).
+  var mp = {}, macroLog = [];
+  var teamF = ['runner_up', 'third_place'], playF = ['golden_ball', 'golden_boot', 'golden_glove'];
+  sheetToObjects('MacroPicks').forEach(function(row) {
+    var uid = String(row.user_id), total = 0, detail = [];
+    teamF.forEach(function(f) { var ok = row[f] && row[f] === answers[f]; if (ok) total += MACRO_PTS[f]; if (row[f]) detail.push(f + '="' + row[f] + '"' + (ok ? ' ✓+' + MACRO_PTS[f] : ' ✗')); });
+    playF.forEach(function(f) { var ok = nameMatch(row[f], answers[f]); if (ok) total += MACRO_PTS[f]; if (row[f]) detail.push(f + '="' + row[f] + '"' + (ok ? ' ✓+' + MACRO_PTS[f] : ' ✗')); });
+    mp[uid] = total;
+    macroLog.push({ uid: uid, detail: detail });
+  });
+
+  var board = users.map(function(u) {
+    var uid = String(u.id);
+    var g = gp[uid] || 0, b = bp[uid] || 0, m = mp[uid] || 0;
+    return { id: u.id, name: u.display_name, paid: isPaid(u),
+             group: g, bracket: b, macro: m, total: g + b + m,
+             exact: exact[uid] || 0, earliest: earliest[uid] === undefined ? Infinity : earliest[uid] };
+  });
+
+  // Overall order: total → most exact → group pts → earliest submit → name.
+  function cmpOverall(a, b) {
+    return (b.total - a.total) || (b.exact - a.exact) || (b.group - a.group)
+        || (a.earliest - b.earliest) || String(a.name).localeCompare(String(b.name));
+  }
+  board.sort(cmpOverall);
+
+  // Prize winners — PAID players only (skip unpaid to the next paid finisher).
+  var paidOverall = board.filter(function(r) { return r.paid; });
+  var first = paidOverall[0] || null;
+  var second = paidOverall[1] || null;
+  // Best group stage: highest group pts among paid, tiebreak exact → earliest → name.
+  var bestGroup = paidOverall.slice().sort(function(a, b) {
+    return (b.group - a.group) || (b.exact - a.exact) || (a.earliest - b.earliest) || String(a.name).localeCompare(String(b.name));
+  })[0] || null;
+
+  var paidCount = board.filter(function(r) { return r.paid; }).length;
+  var playerCount = board.length;
+  var pool = paidCount * buyIn;
+  var prize2 = Math.floor(pool * PRIZE_SPLIT.second);
+  var prizeG = Math.floor(pool * PRIZE_SPLIT.group);
+  var prize1 = pool - prize2 - prizeG; // remainder to 1st so the whole pool is distributed
+  var pct = playerCount ? Math.round(paidCount / playerCount * 100) : 0;
+
+  var ribbon = '🏆 That’s a wrap — Spain are World Champions! Final results are in. ' +
+    (first ? '🥇 1st: ' + first.name + ' ($' + prize1 + ') · ' : '') +
+    (second ? '🥈 2nd: ' + second.name + ' ($' + prize2 + ') · ' : '') +
+    (bestGroup ? '📊 Best Group Stage: ' + bestGroup.name + ' ($' + prizeG + '). ' : '') +
+    'Pool: $' + pool + ' from ' + paidCount + ' of ' + playerCount + ' players paid (' + pct + '%). ' +
+    'Congrats winners — thanks for playing! ⚽';
+
+  return { board: board, pool: pool, prize1: prize1, prize2: prize2, prizeG: prizeG,
+           first: first, second: second, bestGroup: bestGroup,
+           paidCount: paidCount, playerCount: playerCount, pct: pct, macroLog: macroLog, ribbon: ribbon };
+}
+
+// DRY RUN — logs the full final picture and writes NOTHING. Review this before finalizing.
+function previewFinalize() {
+  var S = _computeFinalStandings();
+  Logger.log('===== FINAL STANDINGS PREVIEW (no data written) =====');
+  S.board.forEach(function(r, i) {
+    Logger.log((i + 1) + '. ' + (r.paid ? '' : '(UNPAID) ') + r.name +
+      ' — total ' + r.total + '  [group ' + r.group + ' / bracket ' + r.bracket + ' / macro ' + r.macro + ', exact ' + r.exact + ']');
+  });
+  Logger.log('----- macro pick matches -----');
+  var byId = {}; S.board.forEach(function(r) { byId[String(r.id)] = r.name; });
+  S.macroLog.forEach(function(m) { if (m.detail.length) Logger.log('  ' + (byId[m.uid] || m.uid) + ': ' + m.detail.join('  |  ')); });
+  Logger.log('----- prizes (paid players only) -----');
+  Logger.log('  Pool $' + S.pool + '  (' + S.paidCount + '/' + S.playerCount + ' paid, ' + S.pct + '%)');
+  Logger.log('  🥇 1st ($' + S.prize1 + '): ' + (S.first ? S.first.name : '—'));
+  Logger.log('  🥈 2nd ($' + S.prize2 + '): ' + (S.second ? S.second.name : '—'));
+  Logger.log('  📊 Best Group ($' + S.prizeG + '): ' + (S.bestGroup ? S.bestGroup.name + ' (' + S.bestGroup.group + ' group pts)' : '—'));
+  if (S.first && S.bestGroup && S.first.id === S.bestGroup.id) Logger.log('  NOTE: 1st place also has the best group stage (wins both).');
+  Logger.log('----- ribbon -----');
+  Logger.log('  ' + S.ribbon);
+  Logger.log('Run fixNothing? This was a preview only. Run finalizeTournament to commit.');
+}
+
+// COMMIT — records the corrected knockout winners, rescoring the bracket, scores macros, rebuilds
+// the leaderboard, publishes the ribbon, marks the tournament complete, and stops the auto-fetch
+// trigger so nothing overwrites the finalized results. Run previewFinalize first.
+function finalizeTournament() {
+  var winners = finalKnockoutWinners();
+  setConfig('knockout_winners', JSON.stringify(winners));
+  scoreBracketByAdvancement(winners);   // bracket + champion bonus, using the corrected winners
+  scoreMacroPicks(_finalMacroAnswers()); // scores macros (tolerant matching) + rebuilds leaderboard
+
+  var S = _computeFinalStandings();
+  setConfig('final_results', JSON.stringify({
+    champion: 'Spain', pool: S.pool, paid_count: S.paidCount, player_count: S.playerCount, pct_paid: S.pct,
+    first: S.first && { name: S.first.name, amount: S.prize1 },
+    second: S.second && { name: S.second.name, amount: S.prize2 },
+    best_group: S.bestGroup && { name: S.bestGroup.name, amount: S.prizeG }
+  }));
+  setConfig('final_ribbon', S.ribbon);
+  setConfig('tournament_status', 'complete');
+
+  // Stop the 15-minute auto-fetch so a late ESPN poll can't revert the finalized scores.
+  ScriptApp.getProjectTriggers().forEach(function(t) {
+    if (t.getHandlerFunction() === 'autoFetchResults') ScriptApp.deleteTrigger(t);
+  });
+
+  rebuildLeaderboard();
+  Logger.log('finalizeTournament: done. Champion Spain. Pool $' + S.pool + ' (' + S.paidCount + '/' + S.playerCount + ' paid).');
+  Logger.log('  🥇 ' + (S.first && S.first.name) + ' $' + S.prize1 + '  🥈 ' + (S.second && S.second.name) + ' $' + S.prize2 + '  📊 ' + (S.bestGroup && S.bestGroup.name) + ' $' + S.prizeG);
+  Logger.log('  Ribbon is live: ' + S.ribbon);
 }
 
 // ── Time Trigger Setup ────────────────────────────────────────────────────────

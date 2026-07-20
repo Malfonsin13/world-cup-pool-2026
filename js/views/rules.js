@@ -4,7 +4,7 @@ Router.register('rules', async function(container) {
   container.innerHTML = '<div class="loading">Loading…</div>';
 
   // Fetch live pool data (non-fatal — show percentages if unavailable)
-  let poolTotal = 0, prize1 = 0, prize2 = 0, prizeGrp = 0, playerCount = 0;
+  let poolTotal = 0, prize1 = 0, prize2 = 0, prizeGrp = 0, playerCount = 0, paidCount = 0, complete = false;
   try {
     const data = await API.get('getLeaderboard');
     poolTotal   = data.pool    || 0;
@@ -12,6 +12,8 @@ Router.register('rules', async function(container) {
     prize2      = data.prize_2nd  || 0;
     prizeGrp    = data.prize_group || 0;
     playerCount = data.player_count != null ? data.player_count : (data.paid_count || 0);
+    paidCount   = data.paid_count != null ? data.paid_count : playerCount;
+    complete    = data.tournament_status === 'complete';
   } catch (e) { /* non-fatal */ }
 
   const buyIn = CONFIG.BUY_IN;
@@ -86,7 +88,9 @@ Router.register('rules', async function(container) {
         <div class="prize-pct">15% of pool</div>
       </div>
     </div>
-    <p class="pool-summary">Projected pool: <strong>$${poolTotal}</strong> — ${playerCount} player${playerCount !== 1 ? 's' : ''} in × $${buyIn}. Grows as more join!</p>
+    <p class="pool-summary">${complete
+      ? `Final pool: <strong>$${poolTotal}</strong> — ${paidCount} of ${playerCount} players paid × $${buyIn}. 🏆 Tournament complete!`
+      : `Projected pool: <strong>$${poolTotal}</strong> — ${playerCount} player${playerCount !== 1 ? 's' : ''} in × $${buyIn}. Grows as more join!`}</p>
   ` : `
     <div class="prize-boxes">
       <div class="prize-box gold">
